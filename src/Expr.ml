@@ -94,6 +94,13 @@ let word_size = 4
 
 type opnd = R of int | S of int | M of string | L of int
 
+let print_opnd x =
+  match x with
+  | M s -> Printf.printf "%s " s
+  | R n -> Printf.printf "%s " (x86regs.(n))
+  | S n -> Printf.printf "%d " n
+  | L n -> Printf.printf "%d " n
+
 let allocate stack =
   match stack with
   | []                              -> R 0
@@ -121,8 +128,54 @@ let x86compile : instr list -> x86instr list = fun code ->
          | S_PUSH n ->
             let s = allocate stack in
             (s::stack, [X86Mov (L n, s)])
+         | S_ST x ->
+            let s::stack' = stack in
+            (stack', [X86Mov (s, M x)])
+         | S_LD x ->
+            let s = allocate stack in
+            (s::stack, [X86Mov (M x, s)])
+         | S_ADD ->
+            let y::x::stack' = stack in
+            (x::stack', [X86Add (x, y)])
+         | S_MUL ->
+            let y::x::stack' = stack in
+            (x::stack', [X86Mul (x, y)])
+         | S_WRITE ->
+            ([], [X86Pop (R 0); X86Call "write"; X86Push (R 0)])
        in
        x86code @ x86compile' stack' code'
   in
   x86compile' [] code
-                                         
+
+let x86pp code = 
+   print_string ".text\n.globl main\nmain:\n";
+   List.iter (fun i ->
+     match i with
+     | X86Add  (x, y) ->
+        print_string "add ";
+        print_opnd x;
+        print_opnd y;
+        print_string "\n";
+     | X86Mul  (x, y) ->
+        print_string "mul ";
+        print_opnd x;
+        print_opnd y;
+        print_string "\n";
+     | X86Mov  (x, y) ->
+        print_string "mov ";
+        print_opnd x;
+        print_opnd y;
+        print_string "\n";
+     | X86Push x ->
+        print_string "pushl ";
+        print_opnd x;
+        print_string "\n";
+     | X86Pop  x ->
+        print_string "popl ";
+        print_opnd x;
+        print_string "\n";
+     | X86Ret ->
+        print_string "ret\n";
+     | X86Call str ->
+        Printf.printf "call %s\n" str;) code;
+   print_string "ret\n";

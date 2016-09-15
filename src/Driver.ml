@@ -57,3 +57,5 @@ let run input p =
 let _ =
   let [r] = run [3; 4] p in
   Printf.printf "%d\n" r
+
+let _ = x86pp (x86compile (compile_stmt p))
