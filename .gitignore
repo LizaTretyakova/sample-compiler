@@ -1,0 +1,11 @@
+*.log
+*.s
+regression/expressions/generated0????
+*.annot
+*.cma
+*.cmi
+*.cmo
+*.cmx
+*.o
+*.a
+*.byte
