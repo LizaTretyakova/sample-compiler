@@ -1,6 +1,29 @@
 open Ostap 
 open Matcher
 
+let s_to_aop s = 
+    match s with
+    | "+"  -> (+)
+    | "-"  -> (-)
+    | "*"  -> ( * )
+    | "/"  -> (/)
+    | "%"  -> (mod)
+    | _    -> failwith "Language.s_to_aop: unknown op =^^="
+let s_to_cmpop s =
+    match s with
+    | "<=" -> (<=)
+    | "<"  -> (<)
+    | ">=" -> (>=)
+    | ">"  -> (>)
+    | "==" -> (==)
+    | "!=" -> (!=)
+    | _    -> failwith "Language.s_to_cmpop: unknown op =^^="
+let s_to_lop s =
+    match s with
+    | "&&" -> (&&)
+    | "!!" -> (||)
+    | _    -> failwith "Language.s_to_lop: unknown op =^^="
+
 module Expr =
   struct
 
@@ -10,7 +33,21 @@ module Expr =
     | Binop of string * t * t
 
     ostap (
-      parse:
+      parse: ori;
+
+      ori:
+        l:andi suf:("!!" andi)* {
+           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+        }
+      | andi;
+
+      andi:
+        l:cmpi suf:("&&" cmpi)* {
+           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+        }
+      | cmpi;
+
+      cmpi:
         l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
            List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
         }

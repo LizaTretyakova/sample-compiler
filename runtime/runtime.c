@@ -7,6 +7,6 @@ extern int read () {
   return d;
 }
 
-extern void write (int x) {
-  printf ("%d\n", x);
+extern void write (long int x) {
+  printf ("%ld\n", x);
 }

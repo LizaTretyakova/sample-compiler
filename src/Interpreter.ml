@@ -7,20 +7,22 @@ module Expr =
     | Const  n -> n
     | Var    x -> state x
     | Binop (op, x, y) -> 
+        let xv = eval state x in
+        let yv = eval state y in
         match op with
-        | "+"  -> (eval state x) + (eval state y)
-        | "-"  -> (eval state x) - (eval state y)
-        | "*"  -> (eval state x) * (eval state y)
-        | "/"  -> (eval state x) / (eval state y)
-        | "%"  -> (eval state x) mod (eval state y)
-        | "<=" -> (eval state x) <= (eval state y)
-        | "<"  -> (eval state x) < (eval state y)
-        | "==" -> (eval state x) == (eval state y)
-        | "!=" -> (eval state x) != (eval state y)
-        | ">=" -> (eval state x) >= (eval state y)
-        | ">"  -> (eval state x) > (eval state y)
-        | "&&" -> (eval state x) && (eval state y)
-        | "||" -> (eval state x) || (eval state y)
+        | "+"  -> xv + yv
+        | "-"  -> xv - yv
+        | "*"  -> xv * yv
+        | "/"  -> xv / yv
+        | "%"  -> xv mod yv
+        | "<=" -> if xv <= yv then 1 else 0
+        | "<"  -> if xv < yv then 1 else 0
+        | "==" -> if xv == yv then 1 else 0
+        | "!=" -> if xv != yv then 1 else 0
+        | ">=" -> if xv >= yv then 1 else 0
+        | ">"  -> if xv > yv then 1 else 0
+        | "&&" -> if (xv != 0) && (yv != 0) then 1 else 0
+        | "!!" -> if (xv != 0) || (yv != 0) then 1 else 0
  
   end
   

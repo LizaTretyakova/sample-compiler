@@ -14,50 +14,7 @@ let parse infile =
        ] s
      end
     )
-(*<<<<<<< HEAD
 
-let _ =
-  let [r] = run [3; 4] p in
-  Printf.printf "%d\n" r
-
-let ( !! )       = (!)
-let ( !  ) x     = Var x
-let ( $  ) n     = Const n
-let ( +  ) e1 e2 = Add (e1, e2)
-let ( *  ) e1 e2 = Mul (e1, e2)
-
-let skip     = Skip
-let (:=) x e = Assign (x, e)
-let read x   = Read x
-let write x  = Write x
-let (|>) l r = Seq (l, r)
-
-(*
-read (x);
-read (y);
-z := x * x;
-write (z+y)
-*)
-
-let p =
-  read "x" |>
-  read "y" |>
-  ("z" := !"x" * !"x") |>
-  write (!"z" + !"y")  
-
-let _ =
-  let [r] = run [3; 4] p in
-  Printf.printf "%d\n" r
-                
-let run input p =
-  srun input (compile_stmt p)
-
-let _ =
-  let [r] = run [3; 4] p in
-  Printf.printf "%d\n" r
-
-let _ = x86pp (x86compile (compile_stmt p))
-=======*)
     (ostap (!(Language.Stmt.parse) -EOF))
 
 let main = ()
@@ -66,7 +23,8 @@ let main = ()
       match Sys.argv.(1) with
       | "-s" -> `SM , Sys.argv.(2)
       | "-o" -> `X86, Sys.argv.(2)
-      | _    -> `Int, Sys.argv.(1)
+      | "-i" -> `Int, Sys.argv.(2)
+      | _ -> failwith "wrong argument"
     in
     match parse filename with
     | `Ok stmt -> 
