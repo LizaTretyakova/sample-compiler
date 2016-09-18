@@ -1,6 +1,7 @@
 *.log
 *.s
 regression/expressions/generated0????
+regression/deep-expressions/generated?????
 *.annot
 *.cma
 *.cmi
