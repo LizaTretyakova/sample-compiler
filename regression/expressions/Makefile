@@ -8,6 +8,10 @@ $(TESTS): %: %.expr
 	RC_RUNTIME=../../runtime ../../src/rc.byte -o $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
 	cat $@.input | RC_RUNTIME=../../runtime ../../src/rc.byte -i $< > $@.log && diff $@.log orig/$@.log
 	cat $@.input | RC_RUNTIME=../../runtime ../../src/rc.byte -s $< > $@.log && diff $@.log orig/$@.log
+	#RC_RUNTIME=../../runtime ../../rc.native     $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
+	#RC_RUNTIME=../../runtime ../../rc.native -so $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
+	#cat $@.input | RC_RUNTIME=../../runtime ../../rc.native -i $< > $@.log && diff $@.log orig/$@.log
+	#cat $@.input | RC_RUNTIME=../../runtime ../../rc.native -s $< > $@.log && diff $@.log orig/$@.log
 
 clean:
 	rm -f *.log *.s *~ $(TESTS)
