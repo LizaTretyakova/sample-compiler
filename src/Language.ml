@@ -104,7 +104,7 @@ module Stmt =
       | %"skip"                          {Skip}
       (**)
       | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
-      | %"while" e:!(Expr.parse) "do" s:!(parse) "do" {While (e, s)}
+      | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (e, s)}
     )
 
   end

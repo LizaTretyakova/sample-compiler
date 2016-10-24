@@ -1,10 +1,12 @@
 type i =
 | S_READ
 | S_WRITE
-| S_PUSH  of int
-| S_LD    of string
-| S_ST    of string
-| S_BINOP of string
+| S_PUSH   of int
+| S_LD     of string
+| S_ST     of string
+| S_BINOP  of string
+| S_LBL    of string
+| S_IFGOTO of string * string (* z/nz, label *)
 
 let show_instr instr = match instr with
                        | S_READ ->
@@ -24,6 +26,9 @@ let show_instr instr = match instr with
 module Interpreter =
   struct
 
+    let condz  = "z"
+    let condnz = "nz"
+
     let debug_log (state, stack, input, output, code) = 
         Printf.eprintf "\n~~~~~~~~~~~\n[STATE]\n";
         List.iter (fun (name, value) -> Printf.eprintf "(%s %d) " name value) state;
@@ -37,41 +42,65 @@ module Interpreter =
         List.iter show_instr code;
         Printf.eprintf "%!"
 
+    let find_ip label code = 
+        let rec find' label' code' ip =
+            match code' with
+            | [] -> ip (* invalid value to signal the end of the program *)
+            | _  ->
+                let i::code'' = code' in
+                (match i with
+                | S_LBL label' -> ip
+                | _            -> find' label' code'' (ip + 1))
+        in find' label code 0
+
+    let cond_to_op cond ->
+        match cond with
+        | condz  -> (==)
+        | condnz -> (!=)
+        | _    -> failwith "unknown cond"
+       
     let run input code =
-      let rec run' (state, stack, input, output) code =
-	match code with
-	| []       -> output
-	| i::code' ->
-	    run'
-              (match i with
-              | S_READ ->
-		  let y::input' = input in
-		  (state, y::stack, input', output)
-              | S_WRITE ->
-		  let y::stack' = stack in
-		  (state, stack', input, output @ [y])
-              | S_PUSH n ->
-                  (state, n::stack, input, output)
-              | S_LD x ->
-		  (state, (List.assoc x state)::stack, input, output)
-              | S_ST x ->
-		  let y::stack' = stack in
-		  ((x, y)::state, stack', input, output)
-              | S_BINOP s ->
-                  let y::x::stack' = stack in
-                  (match s with
-                   | "+" | "-" | "*" | "/" | "%" -> 
-                         (state, ((Language.s_to_aop s) x y)::stack', input, output)
-                   | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
-                         (state, (if (Language.s_to_cmpop s x y) then 1 else 0)::stack', input, output)
-                   | "&&" | "!!" ->
-                         (state, (if (Language.s_to_lop s (x != 0) (y != 0)) then 1 else 0)::stack', input, output)
-                   | _ -> failwith "Interpreter: unknown op =^^="
-                  )
-              )
-              code'
+        let rec run' (state, stack, input, output, ip) code =
+            if ip >= length code 
+            then output
+            else match code with
+	    | [] -> output
+	    | _  ->
+                let i = nth code ip in
+	        run'
+                    (match i with
+                    | S_READ ->
+		        let y::input' = input in
+		        (state, y::stack, input', output, ip + 1)
+                    | S_WRITE ->
+		        let y::stack' = stack in
+		        (state, stack', input, output @ [y], ip + 1)
+                    | S_PUSH n ->
+                        (state, n::stack, input, output, ip + 1)
+                    | S_LD x ->
+		        (state, (List.assoc x state)::stack, input, output, ip + 1)
+                    | S_ST x ->
+		        let y::stack' = stack in
+		        ((x, y)::state, stack', input, output, ip + 1)
+                    | S_BINOP s ->
+                        let y::x::stack' = stack in
+                        (match s with
+                        | "+" | "-" | "*" | "/" | "%" -> 
+                            (state, ((Language.s_to_aop s) x y)::stack', input, output, ip + 1)
+                        | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
+                            (state, (if (Language.s_to_cmpop s x y) then 1 else 0)::stack', input, output, ip + 1)
+                        | "&&" | "!!" ->
+                            (state, (if (Language.s_to_lop s (x != 0) (y != 0)) then 1 else 0)::stack', input, output, ip + 1)
+                        | _ -> failwith "Interpreter: unknown op =^^=")
+                    | S_LBL _ ->
+                        (state, stack, input, output, ip + 1)
+                    | S_IFGOTO cond label ->
+                        let x::stack' = stack in
+                        (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
+                    )
+                code'
       in
-      run' ([], [], input, []) code
+      run' ([], [], input, [], 0) code
 	
   end
 
@@ -86,11 +115,37 @@ module Compile =
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
 
-    let rec stmt = function
-    | Skip          -> []
-    | Assign (x, e) -> expr e @ [S_ST x]
-    | Read    x     -> [S_READ; S_ST x]
-    | Write   e     -> expr e @ [S_WRITE]
-    | Seq    (l, r) -> stmt l @ stmt r
+    let rec stmt = 
+        let cnt = 0 in function
+        | Skip           -> []
+        | Assign (x, e)  -> expr e @ [S_ST x]
+        | Read    x      -> [S_READ; S_ST x]
+        | Write   e      -> expr e @ [S_WRITE]
+        | Seq    (l, r)  -> stmt l @ stmt r
+        | If (e, s1, s2) ->
+            let cnt1 = cnt;
+            cnt += 1;
+            let lbl1 = [S_LBL (string_of_int (cnt - 1))] @ stmt s1;
+            let cnt2 = cnt;
+            cnt += 1;
+            let lbl2 = [S_LBL (string_of_int (cnt - 1))] 
+                        @ stmt s2
+                        @ [S_LBL (string_of_int cnt)];
+            let cnt3 = cnt;
+            cnt += 1;
+            expr e 
+            @ [S_IFGOTO condz (string_of_int cnt2)]
+            @ lbl1
+            @ [S_PUSH 0; S_IFGOTO condz (string_of_int cnt3)]
+            @ lbl2
+        | While (e, s)   ->
+            let cnt1 = cnt;
+            let cnt2 = cnt + 1;
+            cnt += 2;
+            [S_PUSH 0; S_IFGOTO condz (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
+            @ stmt s 
+            @ [S_LBL (string_of_int cnt2)]
+            @ expr e 
+            @ [S_IFGOTO condnz (string_of_int cnt1)]
 
   end
