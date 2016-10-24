@@ -10,3 +10,5 @@ regression/deep-expressions/generated?????
 *.o
 *.a
 *.byte
+*~
+*.swp
