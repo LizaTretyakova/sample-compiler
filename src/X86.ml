@@ -237,4 +237,4 @@ let build stmt name =
   Printf.fprintf outf "%s" asm_code;
   (*Printf.eprintf "%s" asm_code;*)
   close_out outf;
-  ignore (Sys.command (Printf.sprintf "gcc -m32 -o %s ../runtime/runtime.o %s.s" name name))
+  ignore (Sys.command (Printf.sprintf "gcc -m32 -o %s $RC_RUNTIME/runtime.o  %s.s" name name))

@@ -21,10 +21,11 @@ let main = ()
   try
     let mode, filename =
       match Sys.argv.(1) with
-      | "-s" -> `SM , Sys.argv.(2)
-      | "-o" -> `X86, Sys.argv.(2)
-      | "-i" -> `Int, Sys.argv.(2)
-      | _ -> failwith "wrong argument"
+      | "-s"  -> `SM , Sys.argv.(2)
+      | "-i"  -> `Int, Sys.argv.(2)
+      | "-so" -> `X86, Sys.argv.(2)
+      | "-o"  -> `X86, Sys.argv.(2)
+      | _     -> `X86, Sys.argv.(1)
     in
     match parse filename with
     | `Ok stmt -> 
