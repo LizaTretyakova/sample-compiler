@@ -6,6 +6,7 @@ type i =
 | S_ST     of string
 | S_BINOP  of string
 | S_LBL    of string
+| S_GOTO   of string
 | S_IFGOTO of string * string (* z/nz, label *)
 
 let show_instr instr = match instr with
@@ -94,6 +95,8 @@ module Interpreter =
                         | _ -> failwith "Interpreter: unknown op =^^=")
                     | S_LBL _ ->
                         (state, stack, input, output, ip + 1)
+                    | S_GOTO label ->
+                        (state, stack, input, output, (find_ip label code))
                     | S_IFGOTO cond label ->
                         let x::stack' = stack in
                         (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
@@ -124,25 +127,24 @@ module Compile =
         | Seq    (l, r)  -> stmt l @ stmt r
         | If (e, s1, s2) ->
             let cnt1 = cnt;
-            cnt += 1;
-            let lbl1 = [S_LBL (string_of_int (cnt - 1))] @ stmt s1;
-            let cnt2 = cnt;
-            cnt += 1;
-            let lbl2 = [S_LBL (string_of_int (cnt - 1))] 
+            let cnt2 = cnt + 1;
+            let cnt3 = cnt + 2;
+            cnt += 3;
+            (*let lbl1 = [S_LBL (string_of_int cnt1)] @ stmt s1;
+            let lbl2 = [S_LBL (string_of_int cnt2)] 
                         @ stmt s2
-                        @ [S_LBL (string_of_int cnt)];
-            let cnt3 = cnt;
-            cnt += 1;
+                        @ [S_LBL (string_of_int cnt3)];*)
             expr e 
-            @ [S_IFGOTO condz (string_of_int cnt2)]
-            @ lbl1
-            @ [S_PUSH 0; S_IFGOTO condz (string_of_int cnt3)]
-            @ lbl2
+            @ [S_IFGOTO condz (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
+            @ stmt s1
+            @ [S_GOTO (string_of_int cnt3); S_LBL (string_of_int cnt2)] 
+            @ stmt s2
+            @ [S_LBL (string_of_int cnt3)];
         | While (e, s)   ->
             let cnt1 = cnt;
             let cnt2 = cnt + 1;
             cnt += 2;
-            [S_PUSH 0; S_IFGOTO condz (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
+            [S_GOTO (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
             @ stmt s 
             @ [S_LBL (string_of_int cnt2)]
             @ expr e 
