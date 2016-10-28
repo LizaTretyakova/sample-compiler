@@ -1,6 +1,6 @@
 *.log
 *.s
-regression/expressions/generated0????
+regression/*
 *.annot
 *.cma
 *.cmi
@@ -9,3 +9,6 @@ regression/expressions/generated0????
 *.o
 *.a
 *.byte
+*~
+*Makefile*
+*m4
