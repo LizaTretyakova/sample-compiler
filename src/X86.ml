@@ -159,22 +159,31 @@ module Compile =
 	      | S_BINOP s ->
                   let y::x::stack' = stack in
                   (match s with
-                   | "+" | "-" | "*" ->
-                          (x::stack', [X86Mov (x, eax);
-                                       X86Arith (s, y, eax);
-                                       X86Mov (eax, x)])
-                   | "/" | "%" ->
+                  | "+" | "-" | "*" ->
+                          (match x with
+                          | R _ -> (x::stack', [X86Arith (s, y, x)])
+                          | _   -> (x::stack', [X86Mov (x, eax);
+                                                X86Arith (s, y, eax);
+                                                X86Mov (eax, x)])
+                          )
+                  | "/" | "%" ->
                           (x::stack', [X86Mov (x, eax);
                                        X86Cltd;
                                        X86Idiv y;
                                        X86Mov ((dest_reg s), x)])
-                   | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
-                          (x::stack', [X86Mov (x, edx);
-                                       X86Xor (eax, eax);
-                                       X86Cmp (y, edx);
-                                       X86Set (s, al);
-                                       X86Mov (eax, x)]) 
-                   | "&&" ->
+                  | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
+                          (match x with
+                          | R _ -> (x::stack', [X86Xor (eax, eax);
+                                                X86Cmp (y, x);
+                                                X86Set (s, al);
+                                                X86Mov (eax, x)])
+                          | _   -> (x::stack', [X86Mov (x, edx);
+                                                X86Xor (eax, eax);
+                                                X86Cmp (y, edx);
+                                                X86Set (s, al);
+                                                X86Mov (eax, x)]) 
+                          )
+                  | "&&" ->
                           (x::stack', [X86Mov (y, edx);
                                        X86Xor (eax, eax);
                                        X86Logic (s, edx, edx); (*'op1' has to be register*)
@@ -184,7 +193,7 @@ module Compile =
                                        X86Set ("ne", dl);
                                        X86Logic ("&", dl, al);
                                        X86Mov (eax, x)])
-                   | "!!" ->
+                  | "!!" ->
                           (x::stack', [X86Xor (eax, eax);
                                        X86Mov (x, edx);
                                        X86Logic (s, y, edx);
