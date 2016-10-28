@@ -54,7 +54,7 @@ module Interpreter =
                 | _            -> find' label' code'' (ip + 1))
         in find' label code 0
 
-    let cond_to_op cond ->
+    let cond_to_op cond =
         match cond with
         | condz  -> (==)
         | condnz -> (!=)
@@ -62,12 +62,12 @@ module Interpreter =
        
     let run input code =
         let rec run' (state, stack, input, output, ip) code =
-            if ip >= length code 
+            if ip >= (List.length code) 
             then output
             else match code with
 	    | [] -> output
 	    | _  ->
-                let i = nth code ip in
+                let i = (List.nth code ip) in
 	        run'
                     (match i with
                     | S_READ ->
@@ -97,11 +97,11 @@ module Interpreter =
                         (state, stack, input, output, ip + 1)
                     | S_GOTO label ->
                         (state, stack, input, output, (find_ip label code))
-                    | S_IFGOTO cond label ->
+                    | S_IFGOTO (cond, label) ->
                         let x::stack' = stack in
                         (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
                     )
-                code'
+                code
       in
       run' ([], [], input, [], 0) code
 	
@@ -118,36 +118,33 @@ module Compile =
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
 
-    let rec stmt = 
-        let cnt = 0 in function
+    let rec stmt cnt = function
+        (*let cnt = 0 in*) 
+        (*match arg with*)
         | Skip           -> []
         | Assign (x, e)  -> expr e @ [S_ST x]
         | Read    x      -> [S_READ; S_ST x]
         | Write   e      -> expr e @ [S_WRITE]
-        | Seq    (l, r)  -> stmt l @ stmt r
+        | Seq    (l, r)  -> stmt cnt l @ stmt cnt r
         | If (e, s1, s2) ->
-            let cnt1 = cnt;
-            let cnt2 = cnt + 1;
-            let cnt3 = cnt + 2;
-            cnt += 3;
-            (*let lbl1 = [S_LBL (string_of_int cnt1)] @ stmt s1;
-            let lbl2 = [S_LBL (string_of_int cnt2)] 
-                        @ stmt s2
-                        @ [S_LBL (string_of_int cnt3)];*)
+            cnt := cnt + 3;
+            let cnt1 = cnt - 3 in
+            let cnt2 = cnt - 2 in
+            let cnt3 = cnt - 1 in
             expr e 
-            @ [S_IFGOTO condz (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
-            @ stmt s1
+            @ [S_IFGOTO (condz, (string_of_int cnt2)); S_LBL (string_of_int cnt1)] 
+            @ stmt cnt s1
             @ [S_GOTO (string_of_int cnt3); S_LBL (string_of_int cnt2)] 
-            @ stmt s2
-            @ [S_LBL (string_of_int cnt3)];
+            @ stmt cnt s2
+            @ [S_LBL (string_of_int cnt3)]
         | While (e, s)   ->
-            let cnt1 = cnt;
-            let cnt2 = cnt + 1;
-            cnt += 2;
+            cnt := cnt + 2;
+            let cnt1 = cnt - 2 in
+            let cnt2 = cnt - 1 in
             [S_GOTO (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
-            @ stmt s 
+            @ stmt cnt s 
             @ [S_LBL (string_of_int cnt2)]
             @ expr e 
-            @ [S_IFGOTO condnz (string_of_int cnt1)]
+            @ [S_IFGOTO (condnz, (string_of_int cnt1))]
 
   end

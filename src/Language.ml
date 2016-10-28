@@ -33,7 +33,6 @@ module Expr =
     | Binop of string * t * t
 
     ostap (
-(*<<<<<<< HEAD*)
       parse: ori;
 
       ori:
@@ -49,12 +48,6 @@ module Expr =
       | cmpi;
 
       cmpi:
-(*=======
-      parse: "." {Const 0}
-
-(**)
-      test:
->>>>>>> upstream/master*)
         l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
            List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
         }
@@ -76,7 +69,6 @@ module Expr =
         n:DECIMAL {Const n}
       | x:IDENT   {Var   x}
       | -"(" parse -")"
-(**)
     )
 
   end
@@ -102,7 +94,6 @@ module Stmt =
       | %"read"  "(" x:IDENT ")"         {Read x}
       | %"write" "(" e:!(Expr.parse) ")" {Write e}
       | %"skip"                          {Skip}
-      (**)
       | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
       | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (e, s)}
     )
