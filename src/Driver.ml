@@ -43,7 +43,7 @@ let main = ()
 	     let input = read [] in
 	     let output =
 	       match mode with
-	       | `SM -> StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt)
+	       | `SM -> StackMachine.Interpreter.run input (StackMachine.Compile.stmt (ref 0) stmt)
 	       | _   -> Interpreter.Stmt.eval input stmt
 	     in
 	     List.iter (fun i -> Printf.printf "%d\n" i) output
