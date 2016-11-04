@@ -12,3 +12,5 @@ regression/deep-expressions/generated?????
 *.byte
 *~
 *.swp
+_build
+*.native
