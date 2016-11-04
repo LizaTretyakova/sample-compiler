@@ -41,17 +41,6 @@ module Interpreter =
         List.iter show_instr code;
         Printf.eprintf "%!"
 
-    let find_ip label code = 
-        let rec find' label' code' ip =
-            match code' with
-            | [] -> ip (* invalid value to signal the end of the program *)
-            | _  ->
-                let i::code'' = code' in
-                (match i with
-                | S_LBL lbl -> if (lbl = label') then ip else find' label' code'' (ip + 1)
-                | _            -> find' label' code'' (ip + 1))
-        in find' label code 0
-
     let cond_to_op = function
         (* I can just guess that comparing to 'cond[n]z' variables failed because of the = and == issues..*)
         | "z"  -> (==)
@@ -63,7 +52,6 @@ module Interpreter =
             if ip >= (List.length code) 
             then output
             else match code with
-	    | [] -> output
 	    | _  ->
                 let i = (List.nth code ip) in
 	        run'
@@ -83,21 +71,22 @@ module Interpreter =
 		        ((x, y)::state, stack', input, output, ip + 1)
                     | S_BINOP s ->
                         let y::x::stack' = stack in
+                        let v = (if (Language.s_to_lop s (x != 0) (y != 0)) then 1 else 0) in
                         (match s with
                         | "+" | "-" | "*" | "/" | "%" -> 
                             (state, ((Language.s_to_aop s) x y)::stack', input, output, ip + 1)
                         | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
                             (state, (if (Language.s_to_cmpop s x y) then 1 else 0)::stack', input, output, ip + 1)
                         | "&&" | "!!" ->
-                            (state, (if (Language.s_to_lop s (x != 0) (y != 0)) then 1 else 0)::stack', input, output, ip + 1)
+                            (state, v::stack', input, output, ip + 1)
                         | _ -> failwith "Interpreter: unknown op =^^=")
                     | S_LBL _ ->
                         (state, stack, input, output, ip + 1)
                     | S_GOTO label ->
-                        (state, stack, input, output, (find_ip label code))
+                        (state, stack, input, output, (List.find ((=) (S_LBL label)) code))
                     | S_IFGOTO (cond, label) ->
                         let x::stack' = stack in
-                        (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
+                        (state, stack', input, output, (if ((cond_to_op cond) x 0) then (List.find ((=) (S_LBL label)) code) else (ip + 1)))
                     )
                 code
       in
@@ -116,7 +105,12 @@ module Compile =
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
 
-    let rec stmt cnt = function
+    let cnt = ref -1 in
+    let new_label () =
+        cnt := !cnt + 1;
+        string_of_int !cnt
+
+    let rec stmt = function
         | Skip           -> []
         | Assign (x, e)  -> expr e @ [S_ST x]
         | Read    x      -> [S_READ; S_ST x]
@@ -124,24 +118,24 @@ module Compile =
         | Seq    (l, r)  -> stmt cnt l @ stmt cnt r
         | If (e, s1, s2) ->
             (*Printf.eprintf "Compiler: if\n%!";*)
-            cnt := !cnt + 3;
-            let cnt1 = !cnt - 3 in
-            let cnt2 = !cnt - 2 in
-            let cnt3 = !cnt - 1 in
+            (*cnt := !cnt + 3;*)
+            let lbl1 = new_label in
+            let lbl2 = new_label in
+            let lbl3 = new_label in
             expr e 
-            @ [S_IFGOTO (Interpreter.condz, (string_of_int cnt2)); S_LBL (string_of_int cnt1)] 
-            @ stmt cnt s1
-            @ [S_GOTO (string_of_int cnt3); S_LBL (string_of_int cnt2)] 
-            @ stmt cnt s2
-            @ [S_LBL (string_of_int cnt3)]
+            @ [S_IFGOTO (Interpreter.condz, lbl2); S_LBL lbl1] 
+            @ stmt s1
+            @ [S_GOTO lbl3; S_LBL lbl2] 
+            @ stmt s2
+            @ [S_LBL lbl3]
         | While (e, s)   ->
-            cnt := !cnt + 2;
-            let cnt1 = !cnt - 2 in
-            let cnt2 = !cnt - 1 in
-            [S_GOTO (string_of_int cnt2); S_LBL (string_of_int cnt1)] 
-            @ stmt cnt s 
-            @ [S_LBL (string_of_int cnt2)]
+            (*cnt := !cnt + 2;*)
+            let lbl1 = new_label in
+            let lbl2 = new_label in
+            [S_GOTO lbl2; S_LBL lbl1] 
+            @ stmt s 
+            @ [S_LBL lbl2]
             @ expr e 
-            @ [S_IFGOTO (Interpreter.condnz, (string_of_int cnt1))]
+            @ [S_IFGOTO (Interpreter.condnz, lbl1)]
 
   end
