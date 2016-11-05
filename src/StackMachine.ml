@@ -47,13 +47,16 @@ module Interpreter =
         | "nz" -> (!=)
         | _    -> failwith "unknown cond"
        
+    let rec find_ip label code =
+        match code with
+        | [] -> failwith "label not found"
+        | i::code' -> if i == S_LBL label then 0 else 1 + find_ip label code'
+
     let run input code =
         let rec run' (state, stack, input, output, ip) code =
             if ip >= (List.length code) 
             then output
-            else match code with
-	    | _  ->
-                let i = (List.nth code ip) in
+            else let i = (List.nth code ip) in
 	        run'
                     (match i with
                     | S_READ ->
@@ -83,10 +86,10 @@ module Interpreter =
                     | S_LBL _ ->
                         (state, stack, input, output, ip + 1)
                     | S_GOTO label ->
-                        (state, stack, input, output, (List.find ((=) (S_LBL label)) code))
+                        (state, stack, input, output, (find_ip label code))
                     | S_IFGOTO (cond, label) ->
                         let x::stack' = stack in
-                        (state, stack', input, output, (if ((cond_to_op cond) x 0) then (List.find ((=) (S_LBL label)) code) else (ip + 1)))
+                        (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
                     )
                 code
       in
@@ -105,7 +108,7 @@ module Compile =
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
 
-    let cnt = ref -1 in
+    let cnt = ref -1 
     let new_label () =
         cnt := !cnt + 1;
         string_of_int !cnt
@@ -115,10 +118,8 @@ module Compile =
         | Assign (x, e)  -> expr e @ [S_ST x]
         | Read    x      -> [S_READ; S_ST x]
         | Write   e      -> expr e @ [S_WRITE]
-        | Seq    (l, r)  -> stmt cnt l @ stmt cnt r
+        | Seq    (l, r)  -> stmt l @ stmt r
         | If (e, s1, s2) ->
-            (*Printf.eprintf "Compiler: if\n%!";*)
-            (*cnt := !cnt + 3;*)
             let lbl1 = new_label in
             let lbl2 = new_label in
             let lbl3 = new_label in
@@ -129,7 +130,6 @@ module Compile =
             @ stmt s2
             @ [S_LBL lbl3]
         | While (e, s)   ->
-            (*cnt := !cnt + 2;*)
             let lbl1 = new_label in
             let lbl2 = new_label in
             [S_GOTO lbl2; S_LBL lbl1] 

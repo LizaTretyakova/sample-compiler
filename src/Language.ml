@@ -84,6 +84,7 @@ module Stmt =
     | Seq    of t * t
     | If     of Expr.t * t * t
     | While  of Expr.t * t
+    | Repeat of t * Expr.t
 
     ostap (
       parse: s:simple d:(-";" parse)? {
@@ -96,6 +97,7 @@ module Stmt =
       | %"skip"                          {Skip}
       | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
       | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (e, s)}
+      | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (e, s))}
     )
 
   end
