@@ -50,7 +50,7 @@ module Interpreter =
     let rec find_ip label code =
         match code with
         | [] -> failwith "label not found"
-        | i::code' -> if i == S_LBL label then 0 else 1 + find_ip label code'
+        | i::code' -> if i = S_LBL label then 0 else 1 + find_ip label code'
 
     let run input code =
         let rec run' (state, stack, input, output, ip) code =
@@ -74,20 +74,23 @@ module Interpreter =
 		        ((x, y)::state, stack', input, output, ip + 1)
                     | S_BINOP s ->
                         let y::x::stack' = stack in
-                        let v = (if (Language.s_to_lop s (x != 0) (y != 0)) then 1 else 0) in
                         (match s with
                         | "+" | "-" | "*" | "/" | "%" -> 
                             (state, ((Language.s_to_aop s) x y)::stack', input, output, ip + 1)
                         | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
                             (state, (if (Language.s_to_cmpop s x y) then 1 else 0)::stack', input, output, ip + 1)
                         | "&&" | "!!" ->
+                            let v = (if (Language.s_to_lop s (x != 0) (y != 0)) then 1 else 0) in
                             (state, v::stack', input, output, ip + 1)
                         | _ -> failwith "Interpreter: unknown op =^^=")
-                    | S_LBL _ ->
+                    | S_LBL label ->
+                        (*Printf.eprintf "S_LBL %s" label;*)
                         (state, stack, input, output, ip + 1)
                     | S_GOTO label ->
+                        (*Printf.eprintf "S_GOTO %s" label;*)
                         (state, stack, input, output, (find_ip label code))
                     | S_IFGOTO (cond, label) ->
+                        (*Printf.eprintf "S_IFGOTO %s" label;*)
                         let x::stack' = stack in
                         (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
                     )
@@ -108,7 +111,7 @@ module Compile =
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
 
-    let cnt = ref -1 
+    let cnt = ref (-1) 
     let new_label () =
         cnt := !cnt + 1;
         string_of_int !cnt
@@ -120,9 +123,9 @@ module Compile =
         | Write   e      -> expr e @ [S_WRITE]
         | Seq    (l, r)  -> stmt l @ stmt r
         | If (e, s1, s2) ->
-            let lbl1 = new_label in
-            let lbl2 = new_label in
-            let lbl3 = new_label in
+            let lbl1 = new_label () in
+            let lbl2 = new_label () in
+            let lbl3 = new_label () in
             expr e 
             @ [S_IFGOTO (Interpreter.condz, lbl2); S_LBL lbl1] 
             @ stmt s1
@@ -130,8 +133,8 @@ module Compile =
             @ stmt s2
             @ [S_LBL lbl3]
         | While (e, s)   ->
-            let lbl1 = new_label in
-            let lbl2 = new_label in
+            let lbl1 = new_label () in
+            let lbl2 = new_label () in
             [S_GOTO lbl2; S_LBL lbl1] 
             @ stmt s 
             @ [S_LBL lbl2]

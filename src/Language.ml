@@ -22,7 +22,7 @@ let s_to_lop s =
     match s with
     | "&&" -> (&&)
     | "!!" -> (||)
-    | _    -> failwith "Language.s_to_lop: unknown op =^^="
+    | _    -> Printf.eprintf "%s " s; failwith "Language.s_to_lop: unknown op =^^="
 
 module Expr =
   struct
