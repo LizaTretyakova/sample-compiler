@@ -83,8 +83,11 @@ module Stmt =
     | Assign of string * Expr.t
     | Seq    of t * t
     | If     of Expr.t * t * t
-    | While  of Expr.t * t
+    | While  of string * Expr.t * t
     | Repeat of t * Expr.t
+
+    let condz  = "z"
+    let condnz = "nz"
 
     ostap (
       parse: s:simple d:(-";" parse)? {
@@ -96,8 +99,10 @@ module Stmt =
       | %"write" "(" e:!(Expr.parse) ")" {Write e}
       | %"skip"                          {Skip}
       | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
-      | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (e, s)}
-      | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (e, s))}
+      | %"if" e:!(Expr.parse) "then" s1:!(parse) "fi" {If (e, s1, Skip)}
+      | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (condnz, e, s)}
+      | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
+      | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) "do" s:!(parse) "od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
     )
 
   end

@@ -29,6 +29,7 @@ module Expr =
 module Stmt =
   struct
 
+    open StackMachine.Interpreter
     open Language.Stmt
 
     let eval input stmt =
@@ -43,7 +44,7 @@ module Stmt =
 	    let y::input' = input in
 	    ((x, y) :: state, input', output)
         | If (e, s1, s2)-> eval' c (if ((Expr.eval state' e) == 1) then s1 else s2)
-        | While (e, s)  -> if ((Expr.eval state' e) == 1) 
+        | While (cond, e, s)  -> if ((cond_to_op cond) (Expr.eval state' e) 0) 
             then (eval' (eval' c s) stmt)
             else c
       in
