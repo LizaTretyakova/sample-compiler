@@ -33,9 +33,6 @@ let show_instr = function
 module Interpreter =
   struct
 
-    let condz  = "z"
-    let condnz = "nz"
-
     let debug_log code = 
         Printf.eprintf "\n[CODE]\n";
         List.iter show_instr code;
@@ -127,18 +124,18 @@ module Compile =
             let lbl2 = new_label () in
             let lbl3 = new_label () in
             expr e 
-            @ [S_IFGOTO (Interpreter.condz, lbl2); S_LBL lbl1] 
+            @ [S_IFGOTO (condz, lbl2); S_LBL lbl1] 
             @ stmt s1
             @ [S_GOTO lbl3; S_LBL lbl2] 
             @ stmt s2
             @ [S_LBL lbl3]
-        | While (e, s)   ->
+        | While (cond, e, s)   ->
             let lbl1 = new_label () in
             let lbl2 = new_label () in
             [S_GOTO lbl2; S_LBL lbl1] 
             @ stmt s 
             @ [S_LBL lbl2]
             @ expr e 
-            @ [S_IFGOTO (Interpreter.condnz, lbl1)]
+            @ [S_IFGOTO (cond, lbl1)]
 
   end
