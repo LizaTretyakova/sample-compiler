@@ -44,6 +44,9 @@ type instr =
 | X86Set of string * opnd
 | X86Call of string
 | X86Logic of string * opnd * opnd
+| X86Lbl of string
+| X86Goto of string
+| X86Ifgoto of string * string
 
 module S = Set.Make (String)
 
@@ -109,6 +112,10 @@ module Show =
     | X86Call p       -> Printf.sprintf "\tcall\t%s" p
     | X86Logic (s, op1, op2)
                       -> Printf.sprintf "\t%s\t%s,\t%s" (s_to_logic s) (opnd op1) (opnd op2)
+    | X86Lbl s        -> Printf.sprintf "label%s:" s
+    | X86Goto s       -> Printf.sprintf "\tjmp\tlabel%s" s
+    | X86Ifgoto (cond, s)
+                      -> Printf.sprintf "\tj%s\tlabel%s" cond s
 
                       
   end
@@ -129,68 +136,75 @@ module Compile =
         List.iter StackMachine.show_instr code
 
     let stack_program env code =
-      let rec compile stack code =
-        (*debug_log stack code;*)
-	match code with
-	| []       -> []
-	| i::code' ->
-	    let (stack', x86code) =
-              match i with
-              | S_READ   -> ([eax], [X86Call "read"])
-              | S_WRITE  -> ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)])
-              | S_PUSH n ->
-		  let s = allocate env stack in
-		  (s::stack, [X86Mov (L n, s)])
-              | S_LD x   ->
-		  env#local x;
-		  let s = allocate env stack in
-                  (match s with
-                  | S _ -> (s::stack, [X86Mov (M x, eax);
-                                       X86Mov (eax, s)])
-                  | _   -> (s::stack, [X86Mov (M x, s)]))
-              | S_ST x   ->
-		  env#local x;
-		  let s::stack' = stack in
-                  (match s with
-                  | S _ -> (stack', [X86Mov (s, eax);
-                                     X86Mov (eax, M x)])
-                  | _   -> (stack', [X86Mov (s, M x)]))
+        let rec compile stack code =
+            (*debug_log stack code;*)
+            match code with
+            | []       -> []
+            | i::code' ->
+                let (stack', x86code) =
+                    match i with
+                    | S_READ   -> ([eax], [X86Call "read"])
+                    | S_WRITE  -> ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)])
+                    | S_PUSH n ->
+                        let s = allocate env stack in
+                        (s::stack, [X86Mov (L n, s)])
+                    | S_LD x   ->
+                        env#local x;
+                        let s = allocate env stack in
+                        (match s with
+                        | S _ -> (s::stack, [X86Mov (M x, eax);
+                                             X86Mov (eax, s)])
+                        | _   -> (s::stack, [X86Mov (M x, s)]))
+                    | S_ST x   ->
+                        env#local x;
+                        let s::stack' = stack in
+                        (match s with
+                        | S _ -> (stack', [X86Mov (s, eax);
+                                           X86Mov (eax, M x)])
+                        | _   -> (stack', [X86Mov (s, M x)]))
 
-	      | S_BINOP s ->
-                  let y::x::stack' = stack in
-                  (match s with
-                   | "+" | "-" | "*" ->
-                          (x::stack', [X86Mov (x, eax);
-                                       X86Arith (s, y, eax);
-                                       X86Mov (eax, x)])
-                   | "/" | "%" ->
-                          (x::stack', [X86Mov (x, eax);
-                                       X86Cltd;
-                                       X86Idiv y;
-                                       X86Mov ((dest_reg s), x)])
-                   | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
-                          (x::stack', [X86Mov (x, edx);
-                                       X86Xor (eax, eax);
-                                       X86Cmp (y, edx);
-                                       X86Set (s, al);
-                                       X86Mov (eax, x)]) 
-                   | "&&" ->
-                          (x::stack', [X86Mov (y, edx);
-                                       X86Xor (eax, eax);
-                                       X86Logic (s, edx, edx); (*'op1' has to be register*)
-                                       X86Set ("ne", al);
-                                       X86Mov (x, edx);
-                                       X86Logic (s, edx, edx); (*'op2' has to be register*)
-                                       X86Set ("ne", dl);
-                                       X86Logic ("&", dl, al);
-                                       X86Mov (eax, x)])
-                   | "!!" ->
-                          (x::stack', [X86Xor (eax, eax);
-                                       X86Mov (x, edx);
-                                       X86Logic (s, y, edx);
-                                       X86Set ("ne", al);
-                                       X86Mov (eax, x)])
-                  )
+                    | S_BINOP s ->
+                        let y::x::stack' = stack in
+                        (match s with
+                         | "+" | "-" | "*" ->
+                                (x::stack', [X86Mov (x, eax);
+                                             X86Arith (s, y, eax);
+                                             X86Mov (eax, x)])
+                         | "/" | "%" ->
+                                (x::stack', [X86Mov (x, eax);
+                                             X86Cltd;
+                                             X86Idiv y;
+                                             X86Mov ((dest_reg s), x)])
+                         | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
+                                (x::stack', [X86Mov (x, edx);
+                                             X86Xor (eax, eax);
+                                             X86Cmp (y, edx);
+                                             X86Set (s, al);
+                                             X86Mov (eax, x)]) 
+                         | "&&" ->
+                                (x::stack', [X86Mov (y, edx);
+                                             X86Xor (eax, eax);
+                                             X86Logic (s, edx, edx); (*'op1' has to be register*)
+                                             X86Set ("ne", al);
+                                             X86Mov (x, edx);
+                                             X86Logic (s, edx, edx); (*'op2' has to be register*)
+                                             X86Set ("ne", dl);
+                                             X86Logic ("&", dl, al);
+                                             X86Mov (eax, x)])
+                         | "!!" ->
+                                (x::stack', [X86Xor (eax, eax);
+                                             X86Mov (x, edx);
+                                             X86Logic (s, y, edx);
+                                             X86Set ("ne", al);
+                                             X86Mov (eax, x)])
+                        
+                         )
+                    | S_LBL s   -> (stack, [X86Lbl s])
+                    | S_GOTO s  -> (stack, [X86Goto s])
+                    | S_IFGOTO (cond, s)
+                                ->
+                        let x::stack' = stack in
+                        (stack', [X86Cmp (L 0, x); X86Ifgoto (cond, s)])
 	    in
 	    x86code @ compile stack' code'
       in
