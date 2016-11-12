@@ -30,7 +30,8 @@ module Expr =
         let state' = List.map2 (fun ident arg -> (ident, arg)) fargs args' in
         let (_, output) = Stmt.eval (fenv, state') fbody in
         List.hd output *)
-        feval f args
+        let args' = List.map (fun arg -> eval feval state arg) args in
+        feval f args'
     | Return x -> eval feval state x
 
   end
@@ -48,10 +49,9 @@ module Stmt =
         let feval f args = 
             let fenv' x = List.assoc x fenv in
             let (fargs, fbody) = fenv' f in
-            let args' = List.map (fun arg -> Expr.eval feval state arg) args in
-            let state' = List.map2 (fun ident arg -> (ident, arg)) fargs args' in
-            let (_, output) = eval (fenv, state') fbody in
-            List.hd output 
+            let state'' = List.map2 (fun ident arg -> (ident, arg)) fargs args in
+            let (_, res) = eval' ((fenv, state''), input, output) fbody in
+            List.hd res 
         in
         match stmt with
 	| Skip          -> c
