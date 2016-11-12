@@ -3,8 +3,7 @@ INTERPRETER_TESTS=test011
 
 .PHONY: check $(TESTS) $(INTERPRETER_TESTS) 
 
-check: $(TESTS) 
-	# $(INTERPRETER_TESTS) 
+check: $(TESTS) $(INTERPRETER_TESTS) 
 
 $(TESTS): %: %.expr
 	RC_RUNTIME=../runtime ../rc.native -o  $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log

@@ -28,9 +28,11 @@ module Expr =
   struct
 
     type t =
-    | Const of int
-    | Var   of string
-    | Binop of string * t * t
+    | Const  of int
+    | Var    of string
+    | Binop  of string * t * t
+    | Call   of string * t list
+    | Return of (* the Jedi *) t
 
     ostap (
       parse: ori;
@@ -64,10 +66,13 @@ module Expr =
            List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
         }
       | primary;
-
+      
       primary:
         n:DECIMAL {Const n}
+      | f:IDENT -"(" -")" {Call (f, [])}
+      | f:IDENT -"(" arg:parse args:(-"," parse)* -")" {Call (f, arg::args)}
       | x:IDENT   {Var   x}
+      | %"return" e:parse -";" {Return e}
       | -"(" parse -")"
     )
 
@@ -85,6 +90,7 @@ module Stmt =
     | If     of Expr.t * t * t
     | While  of string * Expr.t * t
     | Repeat of t * Expr.t
+    | Fun    of string * string list * t
 
     let condz  = "z"
     let condnz = "nz"
@@ -103,6 +109,12 @@ module Stmt =
       | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (condnz, e, s)}
       | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
       | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) "do" s:!(parse) "od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
+      | %"fun" f:IDENT "(" arg:IDENT? args:(-"," IDENT)* ")" "begin" body:!(parse) "end" 
+            {Fun (f, 
+                  (match arg with 
+                     None     -> (match args with [] -> [] | _ -> failwith "Invalid function declaration: missed argument.\n")
+                   | Some arg -> arg::args), 
+                  body)}
     )
 
   end
