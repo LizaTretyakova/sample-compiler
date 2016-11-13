@@ -24,15 +24,8 @@ module Expr =
         | "&&" -> if (xv != 0) && (yv != 0) then 1 else 0
         | "!!" -> if (xv != 0) || (yv != 0) then 1 else 0)
     | Call (f, args) ->
-        (* let fenv' x = List.assoc x fenv in *)
-        (* let (fargs, fbody) = fenv' f in
-        let args' = List.map (fun arg -> eval fenv state arg) args in
-        let state' = List.map2 (fun ident arg -> (ident, arg)) fargs args' in
-        let (_, output) = Stmt.eval (fenv, state') fbody in
-        List.hd output *)
         let args' = List.map (fun arg -> eval feval state arg) args in
         feval f args'
-    | Return x -> eval feval state x
 
   end
   
@@ -50,14 +43,17 @@ module Stmt =
             let fenv' x = List.assoc x fenv in
             let (fargs, fbody) = fenv' f in
             let state'' = List.map2 (fun ident arg -> (ident, arg)) fargs args in
-            let (_, res) = eval' ((fenv, state''), input, output) fbody in
-            List.hd res 
+            let (_, _, res) = eval' ((fenv, state''), input, []) fbody in
+            List.iter (fun (name, value) -> Printf.eprintf "%s: name %s value %d\n" f name value) state'';
+            List.iter (fun d -> Printf.eprintf "%s: res %d\n" f d) res;
+            List.hd res
         in
         match stmt with
 	| Skip          -> c
+        | Seq (Return e, _) -> eval' c (Return e)
 	| Seq    (l, r) -> eval' (eval' c l) r
 	| Assign (x, e) -> ((fenv, (x, Expr.eval feval state' e) :: state), input, output)
-	| Write   e     -> (conf, input, output @ [Expr.eval feval state' e])
+        | Write   e     -> (conf, input, output @ [Expr.eval feval state' e])
 	| Read    x     ->
 	    let y::input' = input in
 	    ((fenv, (x, y) :: state), input', output)
@@ -66,6 +62,7 @@ module Stmt =
             then (eval' (eval' c s) stmt)
             else c
         | Fun (fname, fargs, fbody) -> (((fname, (fargs, fbody)) :: fenv, state), input, output)
+        | Return x -> (conf, input, output @ [Expr.eval feval state' x])
       in
       let (result_conf, _, result) = eval' (conf, input, []) stmt in
       (result_conf, result)

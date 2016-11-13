@@ -32,48 +32,47 @@ module Expr =
     | Var    of string
     | Binop  of string * t * t
     | Call   of string * t list
-    | Return of (* the Jedi *) t
 
     ostap (
-      parse: ori;
+        parse: ori;
 
-      ori:
-        l:andi suf:("!!" andi)* {
-           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
-        }
-      | andi;
+        ori:
+            l:andi suf:("!!" andi)* {
+               List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+            }
+        | andi;
 
-      andi:
-        l:cmpi suf:("&&" cmpi)* {
-           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
-        }
-      | cmpi;
+        andi:
+            l:cmpi suf:("&&" cmpi)* {
+               List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+            }
+        | cmpi;
 
-      cmpi:
-        l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
-           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
-        }
-      | addi;
+        cmpi:
+            l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
+               List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+            }
+        | addi;
 
-      addi:
-        l:mulli suf:(("+" | "-") mulli)* {
-          List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
-        }
-      | mulli;
+        addi:
+            l:mulli suf:(("+" | "-") mulli)* {
+              List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+            }
+        | mulli;
 
-      mulli:
-        l:primary suf:(("*" | "/" | "%") primary)* {
-           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
-        }
-      | primary;
-      
-      primary:
-        n:DECIMAL {Const n}
-      | f:IDENT -"(" -")" {Call (f, [])}
-      | f:IDENT -"(" arg:parse args:(-"," parse)* -")" {Call (f, arg::args)}
-      | x:IDENT   {Var   x}
-      | %"return" e:parse -";" {Return e}
-      | -"(" parse -")"
+        mulli:
+            l:primary suf:(("*" | "/" | "%") primary)* {
+               List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+            }
+        | primary;
+
+        name: IDENT;
+          
+        primary:
+          n:DECIMAL {Const n}
+        | f:IDENT -"(" args:!(Util.list0 parse) -")" {Call (f, args)}
+        | x:IDENT   {Var   x}
+        | -"(" parse -")"
     )
 
   end
@@ -91,30 +90,38 @@ module Stmt =
     | While  of string * Expr.t * t
     | Repeat of t * Expr.t
     | Fun    of string * string list * t
+    | Return of (* the Jedi *) Expr.t
 
     let condz  = "z"
     let condnz = "nz"
 
     ostap (
-      parse: s:simple d:(-";" parse)? {
-	match d with None -> s | Some d -> Seq (s, d)
-      };
-      simple:
-        x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
-      | %"read"  "(" x:IDENT ")"         {Read x}
-      | %"write" "(" e:!(Expr.parse) ")" {Write e}
-      | %"skip"                          {Skip}
-      | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
-      | %"if" e:!(Expr.parse) "then" s1:!(parse) "fi" {If (e, s1, Skip)}
-      | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (condnz, e, s)}
-      | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
-      | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) "do" s:!(parse) "od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
-      | %"fun" f:IDENT "(" arg:IDENT? args:(-"," IDENT)* ")" "begin" body:!(parse) "end" 
-            {Fun (f, 
-                  (match arg with 
-                     None     -> (match args with [] -> [] | _ -> failwith "Invalid function declaration: missed argument.\n")
-                   | Some arg -> arg::args), 
-                  body)}
+        parse: fs:(functions)* m:main {
+            match fs with
+            | [] -> m
+            | fs -> List.fold_right (fun f st -> Seq (f, st)) fs m
+        };
+
+        name: IDENT;
+
+        functions: 
+            %"fun" f:IDENT "(" args:!(Util.list0 name) ")" "begin" body:!(main) "end" { Fun (f, args, body)};
+        
+        main: s:simple d:(-";" parse)? {
+	    match d with None -> s | Some d -> Seq (s, d)
+        };
+
+        simple:
+          x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
+        | %"read"  "(" x:IDENT ")"         {Read x}
+        | %"write" "(" e:!(Expr.parse) ")" {Write e}
+        | %"skip"                          {Skip}
+        | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
+        | %"if" e:!(Expr.parse) "then" s1:!(parse) "fi" {If (e, s1, Skip)}
+        | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (condnz, e, s)}
+        | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
+        | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) "do" s:!(parse) "od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
+        | %"return" e:!(Expr.parse) {Return e}
     )
 
   end

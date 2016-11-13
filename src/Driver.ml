@@ -1,6 +1,7 @@
 open Ostap
 
 let parse infile =
+  Printf.eprintf "parse infile\n";
   let s = Util.read infile in
   Util.parse
     (object
@@ -41,12 +42,14 @@ let main = ()
                with End_of_file -> acc
 	     in
 	     let input = read [] in
-	     let output =
+             let ((fenv, state), output) =
 	       match mode with
-	       | `SM -> StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt)
-	       | _   -> Interpreter.Stmt.eval input stmt
+               | `SM -> (([], []), StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt))
+               | _   -> Interpreter.Stmt.eval ([], []) input stmt
 	     in
-	     List.iter (fun i -> Printf.printf "%d\n" i) output
+             List.iter (fun (i, (_, cmd)) -> Printf.eprintf "fenv: %s %s\n" i (match cmd with Language.Stmt.Return _ -> "ret" | _ -> "cmd")) fenv;
+             List.iter (fun (i, d) -> Printf.eprintf "state: %s %d\n" i d) state;
+             List.iter (fun i -> Printf.printf "%d\n" i) output
 	)
 
     | `Fail er -> Printf.eprintf "%s\n" er
