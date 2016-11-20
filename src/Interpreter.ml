@@ -53,33 +53,30 @@ module Stmt =
                        (res, List.rev rout))
         in
         match stmt with
-	| Skip                      -> 
-            c
-        | Seq (Return e, _)         -> 
-            eval' c (Return e)
-	| Seq (l, r)                -> 
-            eval' (eval' c l) r
-	| Assign (x, e)             -> 
+	| Skip -> c
+        | Seq (Return e, _) -> eval' c (Return e)
+	| Seq (l, r)        -> eval' (eval' c l) r
+	| Assign (x, e) -> 
             let (eres, eout) = Expr.eval feval state' e in
             ((fenv, (x, eres) :: state), input, output @ eout)
-        | Write e                   ->
+        | Write e ->
             let (eres, eout) = Expr.eval feval state' e in
             (conf, input, output @ eout @ [eres])
-	| Read x                    ->
+	| Read x  ->
 	    let y::input' = input in
 	    ((fenv, (x, y) :: state), input', output)
-        | If (e, s1, s2)            ->
+        | If (e, s1, s2) ->
             let (eres, eout) = Expr.eval feval state' e in
             eval' (conf, input, output @ eout) (if eres == 1 then s1 else s2)
-        | While (cond, e, s)        ->
+        | While (cond, e, s) ->
             let (eres, eout) = Expr.eval feval state' e in
             let c' = (conf, input, output @ eout) in
             if ((cond_to_op cond) eres 0) 
             then (eval' (eval' c' s) stmt)
             else c'
         | Fun (fname, fargs, fbody) -> 
-            (((fname, (fargs, fbody)) :: fenv, state), input, output)
-        | Return e                  -> 
+            (((fname, (fargs, fbody))::fenv, state), input, output)
+        | Return e -> 
             let (eres, eout) = Expr.eval feval state' e in
             (conf, input, output @ eout @ [eres])
       in

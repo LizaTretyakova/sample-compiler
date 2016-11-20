@@ -95,6 +95,8 @@ module Stmt =
     let condz  = "z"
     let condnz = "nz"
 
+    let drop = "_"
+
     ostap (
         parse: fs:(functions)* m:main {
             match fs with
@@ -113,6 +115,7 @@ module Stmt =
 
         simple:
           x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
+        | f:IDENT "(" args:!(Util.list0 parse) ")" {Assign(drop, Call (f, args))}
         | %"read"  "(" x:IDENT ")"         {Read x}
         | %"write" "(" e:!(Expr.parse) ")" {Write e}
         | %"skip"                          {Skip}
