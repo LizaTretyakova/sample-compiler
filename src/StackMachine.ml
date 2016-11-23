@@ -33,6 +33,16 @@ let show_instr = function
         Printf.eprintf "S_GOTO %s\n" s
     | S_IFGOTO (s1, s2) ->
         Printf.eprintf "S_IFGOTO %s %s\n" s1 s2    
+    | S_CALL (fname, _) ->
+        Printf.eprintf "S_CALL %s ...\n" fname
+    | S_BEGIN (fname, _, _) ->
+        Printf.eprintf "S_BEGIN %s ... ...\n" fname
+    | S_END ->
+        Printf.eprintf "S_END\n"
+    | S_RET ->
+        Printf.eprintf "S_RET\n"
+    | S_DROP ->
+        Printf.eprintf "S_DROP\n"
     | _ -> Printf.eprintf "So wow much command! *O*\n"
                        
 module Interpreter =
@@ -54,10 +64,31 @@ module Interpreter =
         | [] -> failwith "label not found"
         | i::code' -> if i = S_LBL label then 0 else 1 + find_ip label code'
 
+    let rec find_ip_func fname code =
+        match code with
+        | [] -> failwith "function not found"
+        | i::code' -> match i with
+            | S_BEGIN (fname, _, _) -> 0 
+            | _                     -> 1 + find_ip_func fname code'
+
+    let rec create_state args stack = 
+        match args with
+        | [] -> ([], stack)
+        | arg::args' -> 
+            let i::stack' = stack in
+            let (args'', stack'') = create_state args' stack' in
+            ((arg, i)::args'', stack')
+
+    let rec cut_func ip code output = 
+        let cmd = List.nth code ip in
+        match cmd with
+        | S_END -> output
+        | _     -> cut_func (ip + 1) code (output @ [cmd])
+
     let run input code =
-        let rec run' (state, stack, input, output, ip) code =
+        let rec run' ((state, stack, input, output, ip) as c) code =
             if ip >= (List.length code) 
-            then output
+            then c
             else let i = (List.nth code ip) in
 	        run'
                     (match i with
@@ -99,12 +130,20 @@ module Interpreter =
                         let y::stack' = stack in
                         (state, stack', input, output, ip + 1)
                     | S_CALL (fname, fargs) ->
-
+                        (state, (ip + 1)::stack, input, output, (find_ip_func fname code))
+                    | S_BEGIN (fname, fargs, flocals) ->
+                        let ret_addr::stack' = stack in
+                        let (state', stack'') = create_state fargs stack' in
+                        let code' = cut_func ip code [] in
+                        let (_, res::rest, _, out, _) = run' (state', [], [], [], 0) code' in
+                        (state, res::stack'', input, out @ output, ret_addr)
+                    | S_END | S_RET ->
+                        (state, stack, input, output, ip + 1)
                     )
                 code
       in
-      run' ([], [], input, [], 0) code
-	
+      let (_, _, _, result, _) = run' ([], [], input, [], 0) code in
+      result
   end
 
 module Compile =
@@ -113,11 +152,13 @@ module Compile =
     open Language.Expr
     open Language.Stmt
 
-    let rec expr = function
+    let rec expr fenv = function
     | Var   x -> [S_LD   x]
     | Const n -> [S_PUSH n]
-    | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
-    | Call (f, args) -> (List.map (fun arg -> expr arg) args)
+    | Binop (s, x, y) -> (expr fenv x) @ (expr fenv y) @ [S_BINOP s]
+    | Call (f, args) -> 
+        (List.fold_left (fun l arg -> l @ (expr fenv arg)) [] args)
+        @ [S_CALL (f, List.assoc f fenv)]
 
     let cnt = ref (-1) 
     let new_label () =
@@ -135,34 +176,41 @@ module Compile =
 
     let rec stmt fenv = function
         | Skip             -> (fenv, [])
-        | Assign (drop, e) -> (fenv, expr e @ [S_DROP])
-        | Assign (x, e)    -> (fenv, expr e @ [S_ST x])
+        | Assign (drop, e) -> (fenv, (expr fenv e) @ [S_DROP])
+        | Assign (x, e)    -> (fenv, (expr fenv e) @ [S_ST x])
         | Read    x        -> (fenv, [S_READ; S_ST x])
-        | Write   e        -> (fenv, expr e @ [S_WRITE])
-        | Seq    (l, r)    -> (fenv, stmt l @ stmt r)
+        | Write   e        -> (fenv, (expr fenv e) @ [S_WRITE])
+        | Seq    (l, r)    -> 
+            let (fenvl, codel) = stmt fenv l in
+            let (fenvr, coder) = stmt fenvl r in
+            (fenvr, codel @ coder)
         | If (e, s1, s2)   ->
             let lbl1 = new_label () in
             let lbl2 = new_label () in
             let lbl3 = new_label () in
-            (fenv, expr e 
+            let (_, code1) = stmt fenv s1 in (* fenv both times because the branches probably shouldn't affect each other. *)
+            let (_, code2) = stmt fenv s2 in (* Omit the returned fenv sunce it shouldn't introduce new functions. *)
+            (fenv, (expr fenv e) 
             @ [S_IFGOTO (condz, lbl2); S_LBL lbl1] 
-            @ stmt s1
+            @ code1
             @ [S_GOTO lbl3; S_LBL lbl2] 
-            @ stmt s2
+            @ code2
             @ [S_LBL lbl3])
         | While (cond, e, s) ->
             let lbl1 = new_label () in
             let lbl2 = new_label () in
-            (fenv, [S_GOTO lbl2; S_LBL lbl1] 
-            @ stmt s 
+            let (fenv', code') = stmt fenv s in (* fenv' shoud be equivalent to fenv for the same reason as above. *)
+            (fenv', [S_GOTO lbl2; S_LBL lbl1] 
+            @ code'
             @ [S_LBL lbl2]
-            @ expr e 
+            @ (expr fenv e) (* It seems more appropriate to use fenv here, not fenv'. *)
             @ [S_IFGOTO (cond, lbl1)])
         | Fun (fname, fargs, fbody) ->
-            ([(fenv, fargs)] @ fenv, [S_BEGIN (fname, fargs, (exptract_locals [] fbody))] 
-            @ stmt fbody
+            let (fenv', code') = stmt fenv fbody in
+            ([(fname, fargs)] @ fenv' @ fenv, [S_BEGIN (fname, fargs, (extract_locals [] fbody))] 
+            @ code'
             @ [S_END])
         | Return e ->
-            (fenv, expr e @ [S_RET])
+            (fenv, (expr fenv e) @ [S_RET])
 
   end

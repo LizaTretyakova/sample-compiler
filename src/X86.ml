@@ -205,6 +205,8 @@ module Compile =
                                 ->
                         let x::stack' = stack in
                         (stack', [X86Cmp (L 0, x); X86Ifgoto (cond, s)])
+                    | S_CALL (fname, fargs) -> Printf.eprintf "call to %s \n" fname; failwith "function calls not implemented yet"
+                    | _ -> show_instr i; failwith "instr not implemented yet"
 	    in
 	    x86code @ compile stack' code'
       in
@@ -214,7 +216,8 @@ module Compile =
 
 let compile stmt =
   let env = new x86env in
-  let code = Compile.stack_program env @@ StackMachine.Compile.stmt stmt in
+  let (fenv, cmds) = StackMachine.Compile.stmt [] stmt in
+  let code = Compile.stack_program env @@ cmds in
   let asm  = Buffer.create 1024 in
   let (!!) s = Buffer.add_string asm s in
   let (!)  s = !!s; !!"\n" in

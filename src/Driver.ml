@@ -43,7 +43,8 @@ let main = ()
 	     let input = read [] in
              let ((fenv, state), output) =
 	       match mode with
-               | `SM -> (([], []), StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt))
+               | `SM -> let (fenv', cmds) = (StackMachine.Compile.stmt [] stmt) in 
+                    (([], []), StackMachine.Interpreter.run input cmds)
                | _   -> Interpreter.Stmt.eval ([], []) input stmt
 	     in
              List.iter (fun i -> Printf.printf "%d\n" i) output

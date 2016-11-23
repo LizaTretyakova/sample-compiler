@@ -115,9 +115,9 @@ module Stmt =
 
         simple:
           x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
-        | f:IDENT "(" args:!(Util.list0 parse) ")" {Assign(drop, Call (f, args))}
         | %"read"  "(" x:IDENT ")"         {Read x}
         | %"write" "(" e:!(Expr.parse) ")" {Write e}
+        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Assign(drop, Call (f, args))}
         | %"skip"                          {Skip}
         | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
         | %"if" e:!(Expr.parse) "then" s1:!(parse) "fi" {If (e, s1, Skip)}
