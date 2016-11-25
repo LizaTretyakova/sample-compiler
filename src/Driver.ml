@@ -5,7 +5,7 @@ let parse infile =
   Util.parse
     (object
        inherit Matcher.t s
-       inherit Util.Lexers.ident ["read"; "write"; "skip"] s
+       inherit Util.Lexers.ident ["read"; "write"; "skip"; "while"; "do"; "od"; "for"; "repeat"; "until"; "if"; "then"; "else"; "fi"] s
        inherit Util.Lexers.decimal s
        inherit Util.Lexers.skip [
 	 Matcher.Skip.whitespaces " \t\n";
@@ -17,14 +17,16 @@ let parse infile =
 
     (ostap (!(Language.Stmt.parse) -EOF))
 
-let main = ()
+
+exception Wrong_arguments    
+let main =
   try
     let mode, filename =
       match Sys.argv.(1) with
       | "-s" -> `SM , Sys.argv.(2)
       | "-o" -> `X86, Sys.argv.(2)
       | "-i" -> `Int, Sys.argv.(2)
-      | _ -> raise (Invalid_argument "invalid flag")
+      | _ -> raise Wrong_arguments
     in
     match parse filename with
     | `Ok stmt -> 
@@ -52,6 +54,6 @@ let main = ()
 
     | `Fail er -> Printf.eprintf "%s\n" er
   with 
-  | Invalid_argument _ ->
+  | Wrong_arguments ->
       Printf.printf "Usage: rc.byte <command> <name.expr>\n";
       Printf.printf "  <command> should be one of: -i, -s, -o\n"

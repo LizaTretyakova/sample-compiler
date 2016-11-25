@@ -85,6 +85,7 @@ module Stmt =
     | Read   of string
     | Write  of Expr.t
     | Assign of string * Expr.t
+    | Call   of string * Expr.t list
     | Seq    of t * t
     | If     of Expr.t * t * t
     | While  of string * Expr.t * t
@@ -109,22 +110,22 @@ module Stmt =
         functions: 
             %"fun" f:IDENT "(" args:!(Util.list0 name) ")" "begin" body:!(main) "end" { Fun (f, args, body)};
         
-        main: s:simple d:(-";" parse)? {
+        main: s:simple d:(-";" (* parse *) main)? {
 	    match d with None -> s | Some d -> Seq (s, d)
         };
 
         simple:
-          x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
-        | %"read"  "(" x:IDENT ")"         {Read x}
+          %"read"  "(" x:IDENT ")"         {Read x}
         | %"write" "(" e:!(Expr.parse) ")" {Write e}
-        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Assign(drop, Call (f, args))}
         | %"skip"                          {Skip}
-        | %"if" e:!(Expr.parse) "then" s1:!(parse) "else" s2:!(parse) "fi" {If (e, s1, s2)}
-        | %"if" e:!(Expr.parse) "then" s1:!(parse) "fi" {If (e, s1, Skip)}
-        | %"while" e:!(Expr.parse) "do" s:!(parse) "od" {While (condnz, e, s)}
-        | %"repeat" s:!(parse) "until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
-        | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) "do" s:!(parse) "od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
+        | %"if" e:!(Expr.parse) %"then" s1:!(parse) %"else" s2:!(parse) %"fi" {If (e, s1, s2)}
+        | %"if" e:!(Expr.parse) %"then" s1:!(parse) %"fi" {If (e, s1, Skip)}
+        | %"while" e:!(Expr.parse) %"do" s:!(parse) %"od" {While (condnz, e, s)}
+        | %"repeat" s:!(parse) %"until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
+        | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) %"do" s:!(parse) %"od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
         | %"return" e:!(Expr.parse) {Return e}
+        | x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
+        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Call (f, args)}
     )
 
   end

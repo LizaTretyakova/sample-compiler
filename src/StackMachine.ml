@@ -67,9 +67,20 @@ module Interpreter =
     let rec find_ip_func fname code =
         match code with
         | [] -> failwith "function not found"
-        | i::code' -> match i with
-            | S_BEGIN (fname, _, _) -> 0 
-            | _                     -> 1 + find_ip_func fname code'
+        | i::code' -> 
+            (match i with
+            | S_BEGIN (fname', _, _) -> if (fname' = fname) then 0 else 1 + find_ip_func fname code' 
+            | _                     -> 1 + find_ip_func fname code')
+
+    let find_start code = 
+        let code' = List.rev code in
+        let rec find_start' ip = function
+            | []        -> ip + 1
+            | i::code'' ->
+                (match i with
+                | S_END -> ip + 1
+                | _     -> find_start' (ip - 1) code'')
+        in find_start' ((List.length code') - 1) code'
 
     let rec create_state args stack = 
         match args with
@@ -134,7 +145,7 @@ module Interpreter =
                     | S_BEGIN (fname, fargs, flocals) ->
                         let ret_addr::stack' = stack in
                         let (state', stack'') = create_state fargs stack' in
-                        let code' = cut_func ip code [] in
+                        let code' = cut_func (ip + 1) code [] in
                         let (_, res::rest, _, out, _) = run' (state', [], [], [], 0) code' in
                         (state, res::stack'', input, out @ output, ret_addr)
                     | S_END | S_RET ->
@@ -142,7 +153,7 @@ module Interpreter =
                     )
                 code
       in
-      let (_, _, _, result, _) = run' ([], [], input, [], 0) code in
+      let (_, _, _, result, _) = run' ([], [], input, [], (find_start code)) code in
       result
   end
 
@@ -156,7 +167,7 @@ module Compile =
     | Var   x -> [S_LD   x]
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> (expr fenv x) @ (expr fenv y) @ [S_BINOP s]
-    | Call (f, args) -> 
+    | Language.Expr.Call (f, args) -> 
         (List.fold_left (fun l arg -> l @ (expr fenv arg)) [] args)
         @ [S_CALL (f, List.assoc f fenv)]
 
@@ -176,7 +187,8 @@ module Compile =
 
     let rec stmt fenv = function
         | Skip             -> (fenv, [])
-        | Assign (drop, e) -> (fenv, (expr fenv e) @ [S_DROP])
+        (*| Assign ("_", e)  -> (fenv, (expr fenv e) @ [S_DROP])*)
+        | Language.Stmt.Call (f, args) -> (fenv, (expr fenv (Language.Expr.Call (f, args))) @ [S_DROP])
         | Assign (x, e)    -> (fenv, (expr fenv e) @ [S_ST x])
         | Read    x        -> (fenv, [S_READ; S_ST x])
         | Write   e        -> (fenv, (expr fenv e) @ [S_WRITE])
