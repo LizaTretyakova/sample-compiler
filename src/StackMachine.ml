@@ -75,11 +75,13 @@ module Interpreter =
     let find_start code = 
         let code' = List.rev code in
         let rec find_start' ip = function
-            | []        -> ip + 1
+            | []        -> (ip + 1, [S_LBL "main"])
             | i::code'' ->
                 (match i with
-                | S_END -> ip + 1
-                | _     -> find_start' (ip - 1) code'')
+                | S_END -> (ip + 1, (S_LBL "main")::i::code'')
+                | _     -> 
+                    let (iter, new_code) = find_start' (ip - 1) code'' in
+                    (iter, i::new_code))
         in find_start' ((List.length code') - 1) code'
 
     let rec create_state args stack = 
@@ -153,7 +155,9 @@ module Interpreter =
                     )
                 code
       in
-      let (_, _, _, result, _) = run' ([], [], input, [], (find_start code)) code in
+      let (iter, rev_new_code) = find_start code in
+      let (_, _, _, result, _) = run' ([], [], input, [], iter) (List.rev rev_new_code) in
+      List.iter (fun i -> show_instr i) (List.rev rev_new_code);
       result
   end
 
@@ -174,7 +178,7 @@ module Compile =
     let cnt = ref (-1) 
     let new_label () =
         cnt := !cnt + 1;
-        string_of_int !cnt
+        "label_" ^ (string_of_int !cnt)
     let rec extract_locals locals = function
         | Assign (x, _) -> 
             if List.exists ((==) x) locals

@@ -6,7 +6,9 @@ let x86regs = [|
   "%esi"; 
   "%edi";
   "%eax"; 
-  "%edx"
+  "%edx";
+  "%esp";
+  "%ebp"
 |]
 
 let x86small_regs = [|
@@ -25,6 +27,8 @@ let esi = R 2
 let edi = R 3
 let eax = R 4
 let edx = R 5
+let esp = R 6
+let ebp = R 7
 
 let al = SR 0
 let ah = SR 1
@@ -65,7 +69,7 @@ let allocate env stack =
   match stack with
   | []                              -> R 0
   | (S n)::_                        -> env#allocate (n+1); S (n+1)
-  | (R n)::_ when n < num_of_regs-3 -> R (n+1)
+  | (R n)::_ when n < num_of_regs-5 -> R (n+1)
   | _                               -> S 0
 
 module Show =
@@ -112,10 +116,10 @@ module Show =
     | X86Call p       -> Printf.sprintf "\tcall\t%s" p
     | X86Logic (s, op1, op2)
                       -> Printf.sprintf "\t%s\t%s,\t%s" (s_to_logic s) (opnd op1) (opnd op2)
-    | X86Lbl s        -> Printf.sprintf "label%s:" s
-    | X86Goto s       -> Printf.sprintf "\tjmp\tlabel%s" s
+    | X86Lbl s        -> Printf.sprintf "%s:" s
+    | X86Goto s       -> Printf.sprintf "\tjmp\t%s" s
     | X86Ifgoto (cond, s)
-                      -> Printf.sprintf "\tj%s\tlabel%s" cond s
+                      -> Printf.sprintf "\tj%s\t%s" cond s
 
                       
   end
@@ -135,52 +139,55 @@ module Compile =
         Printf.eprintf "\n[x86 CODE]\n";
         List.iter StackMachine.show_instr code
 
-    let stack_program env code =
-        let rec compile stack code =
+    let stack_program env pre_code =
+        (* Another env! *)
+        let (_, new_code) = Interpreter.find_start pre_code in
+        let code = List.rev new_code in 
+        let rec compile stack code env =
             (*debug_log stack code;*)
             match code with
             | []       -> []
             | i::code' ->
-                let (stack', x86code) =
+                (* Returns a new environment in case of calling a function. *)
+                let (stack', x86code, env') =
                     match i with
-                    | S_READ   -> ([eax], [X86Call "read"])
-                    | S_WRITE  -> ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)])
+                    | S_READ   -> ([eax], [X86Call "read"], env)
+                    | S_WRITE  -> ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)], env)
                     | S_PUSH n ->
                         let s = allocate env stack in
-                        (s::stack, [X86Mov (L n, s)])
+                        (s::stack, [X86Mov (L n, s)], env)
                     | S_LD x   ->
                         env#local x;
                         let s = allocate env stack in
                         (match s with
                         | S _ -> (s::stack, [X86Mov (M x, eax);
-                                             X86Mov (eax, s)])
-                        | _   -> (s::stack, [X86Mov (M x, s)]))
+                                             X86Mov (eax, s)], env)
+                        | _   -> (s::stack, [X86Mov (M x, s)], env))
                     | S_ST x   ->
                         env#local x;
                         let s::stack' = stack in
                         (match s with
                         | S _ -> (stack', [X86Mov (s, eax);
-                                           X86Mov (eax, M x)])
-                        | _   -> (stack', [X86Mov (s, M x)]))
-
+                                           X86Mov (eax, M x)], env)
+                        | _   -> (stack', [X86Mov (s, M x)], env))
                     | S_BINOP s ->
                         let y::x::stack' = stack in
                         (match s with
                          | "+" | "-" | "*" ->
                                 (x::stack', [X86Mov (x, eax);
                                              X86Arith (s, y, eax);
-                                             X86Mov (eax, x)])
+                                             X86Mov (eax, x)], env)
                          | "/" | "%" ->
                                 (x::stack', [X86Mov (x, eax);
                                              X86Cltd;
                                              X86Idiv y;
-                                             X86Mov ((dest_reg s), x)])
+                                             X86Mov ((dest_reg s), x)], env)
                          | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
                                 (x::stack', [X86Mov (x, edx);
                                              X86Xor (eax, eax);
                                              X86Cmp (y, edx);
                                              X86Set (s, al);
-                                             X86Mov (eax, x)]) 
+                                             X86Mov (eax, x)], env) 
                          | "&&" ->
                                 (x::stack', [X86Mov (y, edx);
                                              X86Xor (eax, eax);
@@ -190,27 +197,66 @@ module Compile =
                                              X86Logic (s, edx, edx); (*'op2' has to be register*)
                                              X86Set ("ne", dl);
                                              X86Logic ("&", dl, al);
-                                             X86Mov (eax, x)])
+                                             X86Mov (eax, x)], env)
                          | "!!" ->
                                 (x::stack', [X86Xor (eax, eax);
                                              X86Mov (x, edx);
                                              X86Logic (s, y, edx);
                                              X86Set ("ne", al);
-                                             X86Mov (eax, x)])
+                                             X86Mov (eax, x)], env)
                         
                          )
-                    | S_LBL s   -> (stack, [X86Lbl s])
-                    | S_GOTO s  -> (stack, [X86Goto s])
-                    | S_IFGOTO (cond, s)
-                                ->
+                    | S_LBL s   -> (stack, [X86Lbl s], env)
+                    | S_GOTO s  -> (stack, [X86Goto s], env)
+                    | S_IFGOTO (cond, s) ->
                         let x::stack' = stack in
-                        (stack', [X86Cmp (L 0, x); X86Ifgoto (cond, s)])
-                    | S_CALL (fname, fargs) -> Printf.eprintf "call to %s \n" fname; failwith "function calls not implemented yet"
+                        (stack', [X86Cmp (L 0, x); X86Ifgoto (cond, s)], env)
+                    | S_CALL (fname, fargs) -> 
+                        let rec push_args stack args = 
+                           (match args with
+                            | [] -> (stack, [])
+                            | arg::args' ->
+                                let s::stack' = stack in
+                                let (stack'', cmds) = push_args stack' args' in
+                                (stack'', [X86Push s] @ cmds)) in
+                        let (stack'', cmds) = push_args stack fargs in 
+                        (* Is it alright to allocate like this? Won't there be any confusion? *)
+                        let s = allocate env stack'' in
+                        (s::stack'', [X86Push eax;
+                                      X86Push ecx;
+                                      X86Push edx]
+                                      @ cmds
+                                      @ [X86Call fname;
+                                      X86Arith ("+", L ((List.length fargs) * word_size), esp);
+                                      X86Mov (eax, s);
+                                      X86Pop edx;
+                                      X86Pop ecx;
+                                      X86Pop eax], (new x86env))
+                    | S_BEGIN (fname, fargs, flocals) ->
+                        (stack, [X86Lbl fname;
+                                (* Preserve ebp *)
+                                 X86Push ebp;
+                                (* Set the new ebp *)
+                                 X86Mov (esp, ebp);
+                                (* "Allocating" stack for local variables *)
+                                 X86Arith ("-", L ((List.length flocals) * word_size), esp)], env)
+                    | S_RET ->
+                        let s::stack' = stack in
+                        (stack', [X86Mov (s, eax)], env)
+                    | S_END ->
+                                (* Make esp point to the saved ebp of our caller. *)
+                        (stack, [X86Mov (ebp, esp);
+                                (* Restore the ebp. *)
+                                 X86Pop ebp;
+                                 X86Ret], env)
+                    | S_DROP ->
+                        let s::stack' = stack in
+                        (stack', [], env)
                     | _ -> show_instr i; failwith "instr not implemented yet"
 	    in
-	    x86code @ compile stack' code'
+	    x86code @ compile stack' code' env'
       in
-      compile [] code
+      compile [] code env (* I hope this is now the env from the arguments. *)
 
   end
 
@@ -240,7 +286,7 @@ let compile stmt =
          !"\tpopl\t%ebp"
       )
   in
-  !"main:";
+  (* !"main:"; *)
   prologue();
   List.iter (fun i -> !(Show.instr i)) code;
   epilogue();
