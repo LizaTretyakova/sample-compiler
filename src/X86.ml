@@ -1,4 +1,4 @@
-type opnd = R of int | SR of int | S of int | M of string | L of int
+type opnd = R of int | SR of int | S of int | A of int | L of int
 
 let x86regs = [|
   "%ebx"; 
@@ -53,24 +53,64 @@ type instr =
 | X86Ifgoto of string * string
 
 module S = Set.Make (String)
+module M = Map.Make (String)
 
 class x86env =
   object(self)
-    val    local_vars = ref S.empty
+    (* val    local_vars = ref S.empty
     method local x    = local_vars := S.add x !local_vars
-    method local_vars = S.elements !local_vars
+    method local_vars = S.elements !local_vars *)
 
-    val    allocated  = ref 0
-    method allocate n = allocated := max n !allocated
-    method allocated  = !allocated
+    val regs_capacity = num_of_regs-4
+
+    val fname = ref ""
+    method get_fname =
+        !fname
+    method set_fname new_name = 
+        fname := new_name
+    
+    val local_vars = ref M.empty
+    method local x = M.find x !local_vars
+    val stored_locals = ref 0
+    method store_local x = 
+        stored_locals := !stored_locals + 1;
+        let cur = !stored_locals - 1 in
+        local_vars := M.add x (if cur < regs_capacity
+                               then (R cur)
+                               else (S (cur - regs_capacity))) !local_vars
+    method locals = !stored_locals
+
+    val args = ref M.empty
+    val stored_args = ref 0
+    method store_arg x = 
+        stored_args := !stored_args + 1;
+        let cur = !stored_args - 1 in
+        args := M.add x (A cur) !args
+    method args = !stored_args
+
+    val temps = ref 0
+    (* method allocate n = temps := max n !temps *)
+    method temps = !temps
+    method allocated = !temps + !stored_locals
+
+    method allocate stack =
+        match stack with
+        (* We have stored nothing yet *)
+        | [] -> if !stored_locals + 1 <= regs_capacity then R ((!stored_locals + 1) - 1) else S (!stored_locals - regs_capacity)
+        (* We have already stored a lot, just next *)
+        | (S n)::_ -> S (n + 1)
+        (* We have stored yet not that much, probably fit into regs *)
+        | (R n)::_ -> if (n + 1) < regs_capacity then R (n + 1) else S 0
+        | _ -> failwith "Can't allocae: inconsistent stack\n"
+
   end
 
-let allocate env stack =
+(* let allocate env stack =
   match stack with
   | []                              -> R 0
   | (S n)::_                        -> env#allocate (n+1); S (n+1)
   | (R n)::_ when n < num_of_regs-5 -> R (n+1)
-  | _                               -> S 0
+  | _                               -> S 0 *)
 
 module Show =
   struct
@@ -98,8 +138,15 @@ module Show =
     | R i -> x86regs.(i)
     | SR i -> x86small_regs.(i)
     | S i -> Printf.sprintf "-%d(%%ebp)" (i * word_size)
-    | M x -> x
+    | A i -> Printf.sprintf "%d(%%ebp)" (i * word_size)
     | L i -> Printf.sprintf "$%d" i
+
+    let show_opnd = function
+    | R i -> Printf.eprintf "%s\n" x86regs.(i)
+    | SR i -> Printf.eprintf "%s\n" x86small_regs.(i)
+    | S i -> Printf.eprintf "S %d\n" i
+    | A i -> Printf.eprintf "A %d\n" i
+    | L i -> Printf.eprintf "L %d\n" i
 
     let instr = function
     | X86Arith (s, s1, s2) 
@@ -139,37 +186,59 @@ module Compile =
         Printf.eprintf "\n[x86 CODE]\n";
         List.iter StackMachine.show_instr code
 
+    let get_fun_name fname = 
+        if fname = "main"
+        then fname
+        else "fun_" ^ fname
+
     let stack_program env pre_code =
         (* Another env! *)
-        let (_, new_code) = Interpreter.find_start pre_code in
-        let code = List.rev new_code in 
+        (* List.iter (fun i -> show_instr i) pre_code;
+        Printf.eprintf "=^^=\n"; *)
+        let (_, code) = Interpreter.create_main pre_code in
+        List.iter (fun i -> show_instr i) code;
+        Printf.eprintf "=^^=\n"; 
         let rec compile stack code env =
             (*debug_log stack code;*)
-            match code with
-            | []       -> []
+            (match code with
+            | []       -> ([], env)
             | i::code' ->
+                show_instr i;
                 (* Returns a new environment in case of calling a function. *)
                 let (stack', x86code, env') =
-                    match i with
+                    (match i with
                     | S_READ   -> ([eax], [X86Call "read"], env)
-                    | S_WRITE  -> ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)], env)
+                    | S_WRITE  -> 
+                            let s::stack' = stack in
+                            ([], [X86Push s; X86Call "write"], env)
+                            (* ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)], env) *)
                     | S_PUSH n ->
-                        let s = allocate env stack in
+                        let s = env#allocate stack in
                         (s::stack, [X86Mov (L n, s)], env)
                     | S_LD x   ->
-                        env#local x;
-                        let s = allocate env stack in
-                        (match s with
-                        | S _ -> (s::stack, [X86Mov (M x, eax);
-                                             X86Mov (eax, s)], env)
-                        | _   -> (s::stack, [X86Mov (M x, s)], env))
+                        let y = env#local x in
+                        let s = env#allocate stack in
+                        Printf.eprintf "Load from: ";
+                        Show.show_opnd y;
+                        Printf.eprintf "Load to: ";
+                        Show.show_opnd s;
+                        (match (s, y) with
+                        | (R _, _) | (_, R _) 
+                                     -> (s::stack, [X86Mov (y, s)], env)
+                        | _ -> (s::stack, [X86Mov (y, eax);
+                                           X86Mov (eax, s)], env))
                     | S_ST x   ->
-                        env#local x;
+                        let y = env#local x in
                         let s::stack' = stack in
-                        (match s with
-                        | S _ -> (stack', [X86Mov (s, eax);
-                                           X86Mov (eax, M x)], env)
-                        | _   -> (stack', [X86Mov (s, M x)], env))
+                        Printf.eprintf "Store to: ";
+                        Show.show_opnd y;
+                        Printf.eprintf "Store from: ";
+                        Show.show_opnd s;
+                        (match (s, y) with
+                        | (R _, _) | (_, R _) 
+                                     -> (stack', [X86Mov (s, y)], env)
+                        | _ -> (stack', [X86Mov (s, eax);
+                                         X86Mov (eax, y)], env))
                     | S_BINOP s ->
                         let y::x::stack' = stack in
                         (match s with
@@ -220,20 +289,22 @@ module Compile =
                                 let (stack'', cmds) = push_args stack' args' in
                                 (stack'', [X86Push s] @ cmds)) in
                         let (stack'', cmds) = push_args stack fargs in 
-                        (* Is it alright to allocate like this? Won't there be any confusion? *)
-                        let s = allocate env stack'' in
+                        let s = env#allocate stack in
                         (s::stack'', [X86Push eax;
                                       X86Push ecx;
                                       X86Push edx]
                                       @ cmds
-                                      @ [X86Call fname;
+                                      @ [X86Call (get_fun_name fname);
                                       X86Arith ("+", L ((List.length fargs) * word_size), esp);
                                       X86Mov (eax, s);
                                       X86Pop edx;
                                       X86Pop ecx;
                                       X86Pop eax], (new x86env))
                     | S_BEGIN (fname, fargs, flocals) ->
-                        (stack, [X86Lbl fname;
+                        env#set_fname fname;
+                        List.iter (fun arg   -> env#store_arg arg) fargs;
+                        List.iter (fun local -> env#store_local local) flocals;
+                        (stack, [X86Lbl (get_fun_name fname);
                                 (* Preserve ebp *)
                                  X86Push ebp;
                                 (* Set the new ebp *)
@@ -245,16 +316,23 @@ module Compile =
                         (stack', [X86Mov (s, eax)], env)
                     | S_END ->
                                 (* Make esp point to the saved ebp of our caller. *)
-                        (stack, [X86Mov (ebp, esp);
+                        if env#get_fname = "main"
+                        then (stack, [X86Mov (ebp, esp);
+                                X86Pop ebp;
+                                X86Xor (eax, eax);
+                                X86Ret], env)
+                        else (stack, [X86Mov (ebp, esp);
                                 (* Restore the ebp. *)
-                                 X86Pop ebp;
-                                 X86Ret], env)
+                                X86Pop ebp;
+                                X86Ret], env)
                     | S_DROP ->
                         let s::stack' = stack in
                         (stack', [], env)
-                    | _ -> show_instr i; failwith "instr not implemented yet"
-	    in
-	    x86code @ compile stack' code' env'
+                    | _ -> show_instr i; failwith "instr not implemented yet") in
+                List.iter (fun s -> Show.show_opnd s) stack'; 
+                Printf.eprintf "---\n";
+                let (further_code, _) = (compile stack' code' env') in
+	            ((x86code @ further_code), env)) (* Return our env, probably modified by LD *)
       in
       compile [] code env (* I hope this is now the env from the arguments. *)
 
@@ -263,14 +341,15 @@ module Compile =
 let compile stmt =
   let env = new x86env in
   let (fenv, cmds) = StackMachine.Compile.stmt [] stmt in
-  let code = Compile.stack_program env @@ cmds in
+  (* let code = Compile.stack_program env @@ cmds in *)
+  let (code, env) = Compile.stack_program (new x86env) cmds in
   let asm  = Buffer.create 1024 in
   let (!!) s = Buffer.add_string asm s in
   let (!)  s = !!s; !!"\n" in
   !"\t.text";
-  List.iter (fun x ->
+  (* List.iter (fun x ->
       !(Printf.sprintf "\t.comm\t%s,\t%d,\t%d" x word_size word_size))
-    env#local_vars;
+    env#local_vars; *)
   !"\t.globl\tmain";
   let prologue, epilogue =
     if env#allocated = 0
@@ -287,11 +366,11 @@ let compile stmt =
       )
   in
   (* !"main:"; *)
-  prologue();
+  (* prologue(); *)
   List.iter (fun i -> !(Show.instr i)) code;
-  epilogue();
+  (* epilogue();
   !"\txorl\t%eax,\t%eax";
-  !"\tret";
+  !"\tret";*)
   Buffer.contents asm
 
 let build stmt name =
@@ -300,6 +379,6 @@ let build stmt name =
   Printf.fprintf outf "%s" asm_code;
   (*Printf.eprintf "%s" asm_code;*)
   close_out outf;
-  match Sys.command (Printf.sprintf "gcc -m32 -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
+  match Sys.command (Printf.sprintf "gcc -m32 -g -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
   | 0 -> ()
   | _ -> failwith "gcc failed with non-zero exit code"

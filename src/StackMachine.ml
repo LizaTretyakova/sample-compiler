@@ -72,17 +72,46 @@ module Interpreter =
             | S_BEGIN (fname', _, _) -> if (fname' = fname) then 0 else 1 + find_ip_func fname code' 
             | _                     -> 1 + find_ip_func fname code')
 
-    let find_start code = 
+    (* let create_main code = 
         let code' = List.rev code in
-        let rec find_start' ip = function
+        let rec create_main' ip = function
             | []        -> (ip + 1, [S_LBL "main"])
             | i::code'' ->
                 (match i with
                 | S_END -> (ip + 1, (S_LBL "main")::i::code'')
                 | _     -> 
-                    let (iter, new_code) = find_start' (ip - 1) code'' in
+                    let (iter, new_code) = create_main' (ip - 1) code'' in
                     (iter, i::new_code))
-        in find_start' ((List.length code') - 1) code'
+        in create_main' ((List.length code') - 1) code' *)
+
+    let rec get_locals locals code = 
+        match code with
+        | [] -> locals
+        | i::code' ->
+            (match i with
+            | S_ST x -> 
+                (get_locals
+                    (if List.exists ((=) x) locals
+                    then locals
+                    else x::locals) code')
+            | _ -> get_locals locals code')
+
+    let create_main code =
+        let ip = List.length code in
+        let code' = List.rev code in
+        let rec create_main' ip rev_code_begin code_end =
+            (match rev_code_begin with
+            | [] -> (ip, [S_BEGIN ("main", [], (get_locals [] code_end))]
+                         @ code_end
+                         @ [(* S_RET; *)S_END])
+            | instr::rest_begin ->
+                (match instr with
+                | S_END -> (ip, (List.rev rev_code_begin)
+                                    @ [S_BEGIN ("main", [], (get_locals [] code_end))]
+                                    @ code_end
+                                    @ [(* S_RET; *)S_END])
+                | _     -> (create_main' (ip - 1) rest_begin (instr::code_end))))
+        in create_main' ip code' []
 
     let rec create_state args stack = 
         match args with
@@ -99,10 +128,13 @@ module Interpreter =
         | _     -> cut_func (ip + 1) code (output @ [cmd])
 
     let run input code =
+        (* List.iter (fun i -> show_instr i) code; *)
         let rec run' ((state, stack, input, output, ip) as c) code =
             if ip >= (List.length code) 
             then c
             else let i = (List.nth code ip) in
+                (* Printf.eprintf "In run':\n";
+                show_instr i; *)
 	        run'
                     (match i with
                     | S_READ ->
@@ -145,19 +177,27 @@ module Interpreter =
                     | S_CALL (fname, fargs) ->
                         (state, (ip + 1)::stack, input, output, (find_ip_func fname code))
                     | S_BEGIN (fname, fargs, flocals) ->
-                        let ret_addr::stack' = stack in
+                        let ret_addr::stack' = 
+                            if fname = "main"
+                            then (List.length code)::stack 
+                            else stack in
                         let (state', stack'') = create_state fargs stack' in
                         let code' = cut_func (ip + 1) code [] in
-                        let (_, res::rest, _, out, _) = run' (state', [], [], [], 0) code' in
-                        (state, res::stack'', input, out @ output, ret_addr)
+                        let (_, ret_stack, input', out, _) = run' (state', [], input, [], 0) code' in
+                        let final_stack = 
+                            if fname = "main"
+                            then ret_stack
+                            else let res::rest = ret_stack in res::stack''
+                        in
+                        (state, final_stack, input', out @ output, ret_addr)
                     | S_END | S_RET ->
                         (state, stack, input, output, ip + 1)
                     )
                 code
       in
-      let (iter, rev_new_code) = find_start code in
-      let (_, _, _, result, _) = run' ([], [], input, [], iter) (List.rev rev_new_code) in
-      List.iter (fun i -> show_instr i) (List.rev rev_new_code);
+      let (iter, new_code) = create_main code in
+      let (_, _, _, result, _) = run' ([], [], input, [], iter) new_code in
+      List.iter (fun i -> show_instr i) new_code;
       result
   end
 
