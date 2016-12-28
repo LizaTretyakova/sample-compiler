@@ -14,6 +14,12 @@ type i =
 | S_RET
 | S_DROP
 
+let builtins = [|
+    "main";
+    "read";
+    "write"
+|]
+
 let show_instr = function
     | S_READ ->
         Printf.eprintf "S_READ\n"
@@ -175,7 +181,16 @@ module Interpreter =
                         let y::stack' = stack in
                         (state, stack', input, output, ip + 1)
                     | S_CALL (fname, fargs) ->
-                        (state, (ip + 1)::stack, input, output, (find_ip_func fname code))
+                        if fname = "read"
+                        then 
+		            let y::input' = input in
+		            (state, y::stack, input', output, ip + 1)
+                        else if fname = "write"
+                        then
+		            let y::stack' = stack in
+		            (state, stack', input, output @ [y], ip + 1)
+                        else
+                            (state, (ip + 1)::stack, input, output, (find_ip_func fname code))
                     | S_BEGIN (fname, fargs, flocals) ->
                         let ret_addr::stack' = 
                             if fname = "main"
@@ -234,8 +249,8 @@ module Compile =
         (*| Assign ("_", e)  -> (fenv, (expr fenv e) @ [S_DROP])*)
         | Language.Stmt.Call (f, args) -> (fenv, (expr fenv (Language.Expr.Call (f, args))) @ [S_DROP])
         | Assign (x, e)    -> (fenv, (expr fenv e) @ [S_ST x])
-        | Read    x        -> (fenv, [S_READ; S_ST x])
-        | Write   e        -> (fenv, (expr fenv e) @ [S_WRITE])
+        | Read    x        -> (fenv, [S_CALL ("read", []); S_ST x])(*[S_READ; S_ST x])*)
+        | Write   e        -> (fenv, (expr fenv e) @ [S_CALL ("write", [""])])(*[S_WRITE])*)
         | Seq    (l, r)    -> 
             let (fenvl, codel) = stmt fenv l in
             let (fenvr, coder) = stmt fenvl r in

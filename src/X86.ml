@@ -187,7 +187,7 @@ module Compile =
         List.iter StackMachine.show_instr code
 
     let get_fun_name fname = 
-        if fname = "main"
+        if List.exists ((=) fname) (Array.to_list builtins)
         then fname
         else "fun_" ^ fname
 
@@ -210,7 +210,8 @@ module Compile =
                     | S_READ   -> ([eax], [X86Call "read"], env)
                     | S_WRITE  -> 
                             let s::stack' = stack in
-                            ([], [X86Push s; X86Call "write"], env)
+                            ([], [X86Push eax; X86Push ecx; X86Push edx; X86Push s; X86Call "write";
+                                   X86Arith ("+", (L (word_size * 1)), esp); X86Pop edx; X86Pop ecx; X86Pop eax], env)
                             (* ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)], env) *)
                     | S_PUSH n ->
                         let s = env#allocate stack in
@@ -299,18 +300,19 @@ module Compile =
                                       X86Mov (eax, s);
                                       X86Pop edx;
                                       X86Pop ecx;
-                                      X86Pop eax], (new x86env))
+                                      X86Pop eax], env)
                     | S_BEGIN (fname, fargs, flocals) ->
-                        env#set_fname fname;
-                        List.iter (fun arg   -> env#store_arg arg) fargs;
-                        List.iter (fun local -> env#store_local local) flocals;
+                        let env' = (new x86env) in
+                        env'#set_fname fname;
+                        List.iter (fun arg   -> env'#store_arg arg) fargs;
+                        List.iter (fun local -> env'#store_local local) flocals;
                         (stack, [X86Lbl (get_fun_name fname);
                                 (* Preserve ebp *)
                                  X86Push ebp;
                                 (* Set the new ebp *)
                                  X86Mov (esp, ebp);
                                 (* "Allocating" stack for local variables *)
-                                 X86Arith ("-", L ((List.length flocals) * word_size), esp)], env)
+                                 X86Arith ("-", L ((List.length flocals) * word_size), esp)], env')
                     | S_RET ->
                         let s::stack' = stack in
                         (stack', [X86Mov (s, eax)], env)
