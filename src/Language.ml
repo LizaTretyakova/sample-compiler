@@ -115,7 +115,7 @@ module Stmt =
         };
 
         simple:
-          %"write" "(" e:!(Expr.parse) ")" {Write e}
+          %"write" "(" e:!(Expr.parse) ")" {Assign ("_", Expr.Call ("write", [e]))}
         | %"skip"                          {Skip}
         | %"if" e:!(Expr.parse) %"then" s1:!(parse) %"else" s2:!(parse) %"fi" {If (e, s1, s2)}
         | %"if" e:!(Expr.parse) %"then" s1:!(parse) %"fi" {If (e, s1, Skip)}
@@ -123,9 +123,9 @@ module Stmt =
         | %"repeat" s:!(parse) %"until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
         | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) %"do" s:!(parse) %"od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
         | %"return" e:!(Expr.parse) {Return e}
-        | x:IDENT ":=" %"read" "()"        {Read x}
+        | x:IDENT ":=" %"read" "()"        {Assign (x, Expr.Call ("read", []))}
         | x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
-        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Call (f, args)}
+        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Assign ("_", Expr.Call (f, args))} (* {Call (f, args)} *)
     )
 
   end

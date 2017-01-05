@@ -249,8 +249,8 @@ module Compile =
         (*| Assign ("_", e)  -> (fenv, (expr fenv e) @ [S_DROP])*)
         | Language.Stmt.Call (f, args) -> (fenv, (expr fenv (Language.Expr.Call (f, args))) @ [S_DROP])
         | Assign (x, e)    -> (fenv, (expr fenv e) @ [S_ST x])
-        | Read    x        -> (fenv, [S_CALL ("read", []); S_ST x])(*[S_READ; S_ST x])*)
-        | Write   e        -> (fenv, (expr fenv e) @ [S_CALL ("write", [""])])(*[S_WRITE])*)
+        (* | Read    x        -> (fenv, [S_CALL ("read", []); S_ST x])
+        | Write   e        -> (fenv, (expr fenv e) @ [S_CALL ("write", [""])]) *)
         | Seq    (l, r)    -> 
             let (fenvl, codel) = stmt fenv l in
             let (fenvr, coder) = stmt fenvl r in

@@ -25,10 +25,10 @@ let ebx = R 0
 let ecx = R 1
 let esi = R 2
 let edi = R 3
-let eax = R 4
-let edx = R 5
-let esp = R 6
-let ebp = R 7
+let eax = R 4 (* We do not store *)
+let edx = R 5 (* any local or temp *)
+let esp = R 6 (* values in these *)
+let ebp = R 7 (* registers. *)
 
 let al = SR 0
 let ah = SR 1
@@ -219,10 +219,10 @@ module Compile =
                     | S_LD x   ->
                         let y = env#local x in
                         let s = env#allocate stack in
-                        Printf.eprintf "Load from: ";
+                        (* Printf.eprintf "Load from: ";
                         Show.show_opnd y;
                         Printf.eprintf "Load to: ";
-                        Show.show_opnd s;
+                        Show.show_opnd s; *)
                         (match (s, y) with
                         | (R _, _) | (_, R _) 
                                      -> (s::stack, [X86Mov (y, s)], env)
@@ -231,10 +231,10 @@ module Compile =
                     | S_ST x   ->
                         let y = env#local x in
                         let s::stack' = stack in
-                        Printf.eprintf "Store to: ";
+                        (* Printf.eprintf "Store to: ";
                         Show.show_opnd y;
                         Printf.eprintf "Store from: ";
-                        Show.show_opnd s;
+                        Show.show_opnd s; *)
                         (match (s, y) with
                         | (R _, _) | (_, R _) 
                                      -> (stack', [X86Mov (s, y)], env)
@@ -248,11 +248,22 @@ module Compile =
                                              X86Arith (s, y, eax);
                                              X86Mov (eax, x)], env)
                          | "/" | "%" ->
-                                (x::stack', [X86Mov (x, eax);
-                                             X86Cltd;
-                                             X86Idiv y;
-                                             X86Mov ((dest_reg s), x)], env)
+                                (match y with
+                                 | R _ ->
+                                    (x::stack', [X86Mov (x, eax);
+                                                 X86Cltd;
+                                                 X86Idiv y;
+                                                 X86Mov ((dest_reg s), x)], env)
+                                 | _    ->
+                                    (x::stack', [X86Push ebx;
+                                                 X86Mov (y, ebx);
+                                                 X86Mov (x, eax);
+                                                 X86Cltd;
+                                                 X86Idiv ebx;
+                                                 X86Mov ((dest_reg s), x);
+                                                 X86Pop ebx], env))
                          | "<=" | "<" | ">=" | ">" | "==" | "!=" ->
+                                List.iter (fun s -> Show.show_opnd s) stack';
                                 (x::stack', [X86Mov (x, edx);
                                              X86Xor (eax, eax);
                                              X86Cmp (y, edx);
@@ -331,7 +342,7 @@ module Compile =
                         let s::stack' = stack in
                         (stack', [], env)
                     | _ -> show_instr i; failwith "instr not implemented yet") in
-                List.iter (fun s -> Show.show_opnd s) stack'; 
+                (* List.iter (fun s -> Show.show_opnd s) stack'; *)
                 Printf.eprintf "---\n";
                 let (further_code, _) = (compile stack' code' env') in
 	            ((x86code @ further_code), env)) (* Return our env, probably modified by LD *)
@@ -379,7 +390,7 @@ let build stmt name =
   let outf = open_out (Printf.sprintf "%s.s" name) in
   let asm_code = (compile stmt) in
   Printf.fprintf outf "%s" asm_code;
-  (*Printf.eprintf "%s" asm_code;*)
+  (* Printf.eprintf "%s" asm_code; *)
   close_out outf;
   match Sys.command (Printf.sprintf "gcc -m32 -g -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
   | 0 -> ()
