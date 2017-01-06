@@ -69,24 +69,22 @@ class x86env =
     method set_fname new_name = 
         fname := new_name
     
-    val local_vars = ref M.empty
-    method local x = M.find x !local_vars
+    val vars = ref M.empty
     val stored_locals = ref 0
+    val stored_args = ref 0
+    method locals = !stored_locals
+    method args = !stored_args
+    method local x = M.find x !vars
     method store_local x = 
         stored_locals := !stored_locals + 1;
         let cur = !stored_locals - 1 in
-        local_vars := M.add x (if cur < regs_capacity
+        vars := M.add x (if cur < regs_capacity
                                then (R cur)
-                               else (S (cur - regs_capacity))) !local_vars
-    method locals = !stored_locals
-
-    val args = ref M.empty
-    val stored_args = ref 0
+                               else (S (cur - regs_capacity))) !vars
     method store_arg x = 
         stored_args := !stored_args + 1;
         let cur = !stored_args - 1 in
-        args := M.add x (A cur) !args
-    method args = !stored_args
+        vars := M.add x (A cur) !vars
 
     val temps = ref 0
     (* method allocate n = temps := max n !temps *)
@@ -138,7 +136,7 @@ module Show =
     | R i -> x86regs.(i)
     | SR i -> x86small_regs.(i)
     | S i -> Printf.sprintf "-%d(%%ebp)" (i * word_size)
-    | A i -> Printf.sprintf "%d(%%ebp)" (i * word_size)
+    | A i -> Printf.sprintf "%d(%%ebp)" ((i + 2) * word_size) (* Because i + pushed ebp + return address *)
     | L i -> Printf.sprintf "$%d" i
 
     let show_opnd = function
@@ -193,13 +191,10 @@ module Compile =
 
     let stack_program env pre_code =
         (* Another env! *)
-        (* List.iter (fun i -> show_instr i) pre_code;
-        Printf.eprintf "=^^=\n"; *)
         let (_, code) = Interpreter.create_main pre_code in
         List.iter (fun i -> show_instr i) code;
         Printf.eprintf "=^^=\n"; 
         let rec compile stack code env =
-            (*debug_log stack code;*)
             (match code with
             | []       -> ([], env)
             | i::code' ->
@@ -212,29 +207,20 @@ module Compile =
                             let s::stack' = stack in
                             ([], [X86Push eax; X86Push ecx; X86Push edx; X86Push s; X86Call "write";
                                    X86Arith ("+", (L (word_size * 1)), esp); X86Pop edx; X86Pop ecx; X86Pop eax], env)
-                            (* ([], [X86Push (R 0); X86Call "write"; X86Pop (R 0)], env) *)
                     | S_PUSH n ->
                         let s = env#allocate stack in
                         (s::stack, [X86Mov (L n, s)], env)
                     | S_LD x   ->
                         let y = env#local x in
                         let s = env#allocate stack in
-                        (* Printf.eprintf "Load from: ";
-                        Show.show_opnd y;
-                        Printf.eprintf "Load to: ";
-                        Show.show_opnd s; *)
                         (match (s, y) with
                         | (R _, _) | (_, R _) 
                                      -> (s::stack, [X86Mov (y, s)], env)
                         | _ -> (s::stack, [X86Mov (y, eax);
-                                           X86Mov (eax, s)], env))
+                                           X86Mov (eax, s)], env)) 
                     | S_ST x   ->
                         let y = env#local x in
                         let s::stack' = stack in
-                        (* Printf.eprintf "Store to: ";
-                        Show.show_opnd y;
-                        Printf.eprintf "Store from: ";
-                        Show.show_opnd s; *)
                         (match (s, y) with
                         | (R _, _) | (_, R _) 
                                      -> (stack', [X86Mov (s, y)], env)
@@ -342,7 +328,6 @@ module Compile =
                         let s::stack' = stack in
                         (stack', [], env)
                     | _ -> show_instr i; failwith "instr not implemented yet") in
-                (* List.iter (fun s -> Show.show_opnd s) stack'; *)
                 Printf.eprintf "---\n";
                 let (further_code, _) = (compile stack' code' env') in
 	            ((x86code @ further_code), env)) (* Return our env, probably modified by LD *)
@@ -354,15 +339,11 @@ module Compile =
 let compile stmt =
   let env = new x86env in
   let (fenv, cmds) = StackMachine.Compile.stmt [] stmt in
-  (* let code = Compile.stack_program env @@ cmds in *)
   let (code, env) = Compile.stack_program (new x86env) cmds in
   let asm  = Buffer.create 1024 in
   let (!!) s = Buffer.add_string asm s in
   let (!)  s = !!s; !!"\n" in
   !"\t.text";
-  (* List.iter (fun x ->
-      !(Printf.sprintf "\t.comm\t%s,\t%d,\t%d" x word_size word_size))
-    env#local_vars; *)
   !"\t.globl\tmain";
   let prologue, epilogue =
     if env#allocated = 0

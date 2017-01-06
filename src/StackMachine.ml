@@ -72,23 +72,12 @@ module Interpreter =
 
     let rec find_ip_func fname code =
         match code with
-        | [] -> failwith "function not found"
+        | [] -> Printf.eprintf "Hasn't found %s\n" fname; failwith "function not found"
         | i::code' -> 
             (match i with
             | S_BEGIN (fname', _, _) -> if (fname' = fname) then 0 else 1 + find_ip_func fname code' 
             | _                     -> 1 + find_ip_func fname code')
 
-    (* let create_main code = 
-        let code' = List.rev code in
-        let rec create_main' ip = function
-            | []        -> (ip + 1, [S_LBL "main"])
-            | i::code'' ->
-                (match i with
-                | S_END -> (ip + 1, (S_LBL "main")::i::code'')
-                | _     -> 
-                    let (iter, new_code) = create_main' (ip - 1) code'' in
-                    (iter, i::new_code))
-        in create_main' ((List.length code') - 1) code' *)
 
     let rec get_locals locals code = 
         match code with
@@ -109,13 +98,13 @@ module Interpreter =
             (match rev_code_begin with
             | [] -> (ip, [S_BEGIN ("main", [], (get_locals [] code_end))]
                          @ code_end
-                         @ [(* S_RET; *)S_END])
+                         @ [S_END])
             | instr::rest_begin ->
                 (match instr with
                 | S_END -> (ip, (List.rev rev_code_begin)
                                     @ [S_BEGIN ("main", [], (get_locals [] code_end))]
                                     @ code_end
-                                    @ [(* S_RET; *)S_END])
+                                    @ [S_END])
                 | _     -> (create_main' (ip - 1) rest_begin (instr::code_end))))
         in create_main' ip code' []
 
@@ -133,14 +122,11 @@ module Interpreter =
         | S_END -> output
         | _     -> cut_func (ip + 1) code (output @ [cmd])
 
-    let run input code =
-        (* List.iter (fun i -> show_instr i) code; *)
+    let run input full_code =
         let rec run' ((state, stack, input, output, ip) as c) code =
             if ip >= (List.length code) 
             then c
             else let i = (List.nth code ip) in
-                (* Printf.eprintf "In run':\n";
-                show_instr i; *)
 	        run'
                     (match i with
                     | S_READ ->
@@ -178,8 +164,8 @@ module Interpreter =
                         let x::stack' = stack in
                         (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
                     | S_DROP ->
-                        let y::stack' = stack in
-                        (state, stack', input, output, ip + 1)
+                        (* let y::stack' = stack in *)
+                        (state, stack(*'*), input, output, ip + 1)
                     | S_CALL (fname, fargs) ->
                         if fname = "read"
                         then 
@@ -190,29 +176,34 @@ module Interpreter =
 		            let y::stack' = stack in
 		            (state, stack', input, output @ [y], ip + 1)
                         else
-                            (state, (ip + 1)::stack, input, output, (find_ip_func fname code))
-                    | S_BEGIN (fname, fargs, flocals) ->
+                            let it = find_ip_func fname code in
+                            (state, (ip + 1)::stack, input, output, it)
+                    | S_BEGIN (fname, fargs, flocals) -> 
                         let ret_addr::stack' = 
                             if fname = "main"
-                            then (List.length code)::stack 
+                            then (List.length code - 1)::stack 
                             else stack in
                         let (state', stack'') = create_state fargs stack' in
-                        let code' = cut_func (ip + 1) code [] in
-                        let (_, ret_stack, input', out, _) = run' (state', [], input, [], 0) code' in
+                        (* let code' = cut_func (ip + 1) code [] in
+                        let (_, ret_stack, input', out, _) = run' (state', [], input, [], 0) code' in *)
+                        let (_, ret_stack, input', out, _) = run' (state', [], input, [], ip + 1) code in
                         let final_stack = 
                             if fname = "main"
                             then ret_stack
                             else let res::rest = ret_stack in res::stack''
                         in
                         (state, final_stack, input', out @ output, ret_addr)
-                    | S_END | S_RET ->
-                        (state, stack, input, output, ip + 1)
+                    | S_RET -> 
+                            (state, stack, input, output, List.length code) (* It's time to finish this >:3 *)
+                    | S_END -> (state, stack, input, output, ip + 1)
                     )
                 code
       in
-      let (iter, new_code) = create_main code in
-      let (_, _, _, result, _) = run' ([], [], input, [], iter) new_code in
+      let (iter, new_code) = create_main full_code in
+      Printf.eprintf "***\n";
       List.iter (fun i -> show_instr i) new_code;
+      Printf.eprintf "***\n";
+      let (_, _, _, result, _) = run' ([], [], input, [], iter) new_code in
       result
   end
 
@@ -249,8 +240,8 @@ module Compile =
         (*| Assign ("_", e)  -> (fenv, (expr fenv e) @ [S_DROP])*)
         | Language.Stmt.Call (f, args) -> (fenv, (expr fenv (Language.Expr.Call (f, args))) @ [S_DROP])
         | Assign (x, e)    -> (fenv, (expr fenv e) @ [S_ST x])
-        (* | Read    x        -> (fenv, [S_CALL ("read", []); S_ST x])
-        | Write   e        -> (fenv, (expr fenv e) @ [S_CALL ("write", [""])]) *)
+        | Read    x        -> (fenv, [S_CALL ("read", []); S_ST x])
+        | Write   e        -> (fenv, (expr fenv e) @ [S_CALL ("write", [""]); S_DROP])
         | Seq    (l, r)    -> 
             let (fenvl, codel) = stmt fenv l in
             let (fenvr, coder) = stmt fenvl r in
