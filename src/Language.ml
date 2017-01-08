@@ -92,6 +92,8 @@ module Stmt =
     | Repeat of t * Expr.t
     | Fun    of string * string list * t
     | Return of (* the Jedi *) Expr.t
+    | Asm    of string list * string list 
+    (* [cmds]*, [variables]* *)
 
     let condz  = "z"
     let condnz = "nz"
@@ -114,8 +116,11 @@ module Stmt =
 	    match d with None -> s | Some d -> Seq (s, d)
         };
 
+        (* cmd:
+            -"\"" cmd:STRING -"\"" {cmd}; *)
+
         simple:
-          %"write" "(" e:!(Expr.parse) ")" {Write e} (* {Assign ("_", Expr.Call ("write", [e]))} *)
+          %"write" "(" e:!(Expr.parse) ")" {Write e} 
         | %"skip"                          {Skip}
         | %"if" e:!(Expr.parse) %"then" s1:!(parse) %"else" s2:!(parse) %"fi" {If (e, s1, s2)}
         | %"if" e:!(Expr.parse) %"then" s1:!(parse) %"fi" {If (e, s1, Skip)}
@@ -123,9 +128,10 @@ module Stmt =
         | %"repeat" s:!(parse) %"until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
         | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) %"do" s:!(parse) %"od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
         | %"return" e:!(Expr.parse) {Return e}
-        | x:IDENT ":=" %"read" "()"        {Read x} (* {Assign (x, Expr.Call ("read", []))} *)
+        (* | %"asm" "(" cmds:!(Util.list0 cmd) ":" vars:!(Util.list0 name) ")" {Asm(cmds, vars)} *)
+        | x:IDENT ":=" %"read" "()"        {Read x} 
         | x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
-        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" (* {Assign ("_", Expr.Call (f, args))} *) {Call (f, args)} 
+        | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Call (f, args)} 
     )
 
   end

@@ -1,21 +1,21 @@
 type opnd = R of int | SR of int | S of int | A of int | L of int
 
 let x86regs = [|
-  "%ebx"; 
-  "%ecx"; 
-  "%esi"; 
-  "%edi";
-  "%eax"; 
-  "%edx";
-  "%esp";
-  "%ebp"
+    "%ebx"; 
+    "%ecx"; 
+    "%esi"; 
+    "%edi";
+    "%eax"; 
+    "%edx";
+    "%esp";
+    "%ebp"
 |]
 
 let x86small_regs = [|
-        "%al";
-        "%ah";
-        "%dl";
-        "%dh"
+    "%al";
+    "%ah";
+    "%dl";
+    "%dh"
 |]
 
 let num_of_regs = Array.length x86regs
@@ -51,6 +51,7 @@ type instr =
 | X86Lbl of string
 | X86Goto of string
 | X86Ifgoto of string * string
+| X86Asm of string 
 
 module S = Set.Make (String)
 module M = Map.Make (String)
@@ -165,6 +166,7 @@ module Show =
     | X86Goto s       -> Printf.sprintf "\tjmp\t%s" s
     | X86Ifgoto (cond, s)
                       -> Printf.sprintf "\tj%s\t%s" cond s
+    | X86Asm s        -> Printf.sprintf "\t%s" s
 
                       
   end
@@ -188,6 +190,33 @@ module Compile =
         if List.exists ((=) fname) (Array.to_list builtins)
         then fname
         else "fun_" ^ fname
+
+    (**
+     * 
+     * The arguments can be:
+         * %reg
+         * $const
+         * #var
+     * so they would be distinguisged
+     * by the first character.
+     *
+     *)
+    let get_parsed_cmd cmd vars = 
+        let res = ref cmd in
+        let _   = List.iteri (fun i arg ->
+            let regex = Str.regexp (String.concat "" ["#"; string_of_int i]) in
+            res := Str.global_replace regex arg !res) vars in
+        !res
+       (* let args' = List.map (fun arg -> 
+            let mark = String.sub arg 0 1 in (* The first character *)
+            if mark != "#"
+            then 
+                arg
+            else
+                let arg' = String.sub arg 1 ((String.length arg) - 1) in
+                let num = int_of_string arg' in
+                List.nth vars num) args in
+        String.concat ",\t" args' *)
 
     let stack_program env pre_code =
         (* Another env! *)
@@ -327,6 +356,10 @@ module Compile =
                     | S_DROP ->
                         let s::stack' = stack in
                         (stack', [], env)
+                    | S_ASM (cmds, vars) ->
+                        let vars' = List.map (fun var -> Show.opnd (env#local var) ) vars in
+                        let instrs = List.map (fun cmd -> X86Asm (get_parsed_cmd cmd vars')) cmds in
+                        (stack, instrs, env)
                     | _ -> show_instr i; failwith "instr not implemented yet") in
                 Printf.eprintf "---\n";
                 let (further_code, _) = (compile stack' code' env') in

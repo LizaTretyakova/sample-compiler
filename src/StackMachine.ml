@@ -13,6 +13,7 @@ type i =
 | S_END
 | S_RET
 | S_DROP
+| S_ASM    of string list * string list
 
 let builtins = [|
     "main";
@@ -164,7 +165,6 @@ module Interpreter =
                         let x::stack' = stack in
                         (state, stack', input, output, (if ((cond_to_op cond) x 0) then (find_ip label code) else (ip + 1)))
                     | S_DROP ->
-                        (* let y::stack' = stack in *)
                         (state, stack(*'*), input, output, ip + 1)
                     | S_CALL (fname, fargs) ->
                         if fname = "read"
@@ -184,8 +184,6 @@ module Interpreter =
                             then (List.length code - 1)::stack 
                             else stack in
                         let (state', stack'') = create_state fargs stack' in
-                        (* let code' = cut_func (ip + 1) code [] in
-                        let (_, ret_stack, input', out, _) = run' (state', [], input, [], 0) code' in *)
                         let (_, ret_stack, input', out, _) = run' (state', [], input, [], ip + 1) code in
                         let final_stack = 
                             if fname = "main"
@@ -274,5 +272,7 @@ module Compile =
             @ [S_END])
         | Return e ->
             (fenv, (expr fenv e) @ [S_RET])
+        | Asm (cmds, vars) ->
+            (fenv, [S_ASM (cmds, vars)])
 
   end
