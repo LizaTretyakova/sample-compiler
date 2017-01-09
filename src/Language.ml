@@ -116,8 +116,7 @@ module Stmt =
 	    match d with None -> s | Some d -> Seq (s, d)
         };
 
-        (* cmd:
-            -"\"" cmd:STRING -"\"" {cmd}; *)
+        asm_command: STRING;
 
         simple:
           %"write" "(" e:!(Expr.parse) ")" {Write e} 
@@ -128,7 +127,7 @@ module Stmt =
         | %"repeat" s:!(parse) %"until" e:!(Expr.parse) {Seq (s, While (condz, e, s))}
         | %"for" s1:!(parse) "," e:!(Expr.parse) "," s2:!(parse) %"do" s:!(parse) %"od" {Seq(s1, While (condnz, e, Seq (s, s2)))}
         | %"return" e:!(Expr.parse) {Return e}
-        (* | %"asm" "(" cmds:!(Util.list0 cmd) ":" vars:!(Util.list0 name) ")" {Asm(cmds, vars)} *)
+        | %"asm" "(" cmds:!(Util.list0 asm_command) ":" vars:!(Util.list0 name) ")" {Asm (cmds, vars)} 
         | x:IDENT ":=" %"read" "()"        {Read x} 
         | x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
         | f:IDENT "(" args:!(Util.list0 Expr.parse) ")" {Call (f, args)} 
