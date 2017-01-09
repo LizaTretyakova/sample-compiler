@@ -1,0 +1,10 @@
+asm(
+"mov $5, %ecx",
+"mov $5, %edx",
+"cmp %ecx, %edx",
+"je equal",
+"pushl $0 # if it did not jump to the label equal, then this means ecx and edx are not equal.",
+"call write",
+"equal:",
+"pushl $1 # if it jumped here, then this means ecx and edx are equal",
+"call write":)

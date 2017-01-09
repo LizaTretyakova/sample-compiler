@@ -1,0 +1,16 @@
+(* Illustrates the loop instruction. *)
+x := read();
+y := read();
+asm (
+    "movl #0, %ecx",
+    "start_loop:",
+    "pushl %eax", 
+    "pushl %ecx", 
+    "pushl %edx", 
+    "pushl #1", 
+    "call write", 
+    "addl $4, %esp", 
+    "popl %edx", 
+    "popl %ecx", 
+    "popl %eax",
+    "loop start_loop" : x, y)
