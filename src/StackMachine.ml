@@ -50,6 +50,8 @@ let show_instr = function
         Printf.eprintf "S_RET\n"
     | S_DROP ->
         Printf.eprintf "S_DROP\n"
+    | S_ASM (cmds, _) ->
+        List.iter (fun cmd -> Printf.eprintf "S_ASM %s ...\n" cmd) cmds
     | _ -> Printf.eprintf "So wow much command! *O*\n"
                        
 module Interpreter =
@@ -231,7 +233,7 @@ module Compile =
         | Seq (Return e, _) -> locals
         | Seq (l, r) | If (_, l, r) -> extract_locals (extract_locals locals l) r
         | While (_, _, s) -> extract_locals locals s
-        | Skip | Write _ | Read _ | Fun (_, _, _) | Return _ -> locals
+        | Skip | Write _ | Read _ | Fun (_, _, _) | Return _ | Asm (_, _) -> locals
 
     let rec stmt fenv = function
         | Skip             -> (fenv, [])

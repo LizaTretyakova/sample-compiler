@@ -104,12 +104,6 @@ class x86env =
 
   end
 
-(* let allocate env stack =
-  match stack with
-  | []                              -> R 0
-  | (S n)::_                        -> env#allocate (n+1); S (n+1)
-  | (R n)::_ when n < num_of_regs-5 -> R (n+1)
-  | _                               -> S 0 *)
 
 module Show =
   struct
@@ -207,16 +201,6 @@ module Compile =
             let regex = Str.regexp (String.concat "" ["#"; string_of_int i]) in
             res := Str.global_replace regex arg !res) vars in
         !res
-       (* let args' = List.map (fun arg -> 
-            let mark = String.sub arg 0 1 in (* The first character *)
-            if mark != "#"
-            then 
-                arg
-            else
-                let arg' = String.sub arg 1 ((String.length arg) - 1) in
-                let num = int_of_string arg' in
-                List.nth vars num) args in
-        String.concat ",\t" args' *)
 
     let stack_program env pre_code =
         (* Another env! *)
@@ -392,12 +376,7 @@ let compile stmt =
          !"\tpopl\t%ebp"
       )
   in
-  (* !"main:"; *)
-  (* prologue(); *)
   List.iter (fun i -> !(Show.instr i)) code;
-  (* epilogue();
-  !"\txorl\t%eax,\t%eax";
-  !"\tret";*)
   Buffer.contents asm
 
 let build stmt name =

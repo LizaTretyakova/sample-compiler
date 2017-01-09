@@ -1,0 +1,6 @@
+x := read();
+y := read();
+asm ("pushl %eax", "pushl %ecx", "pushl %edx", "pushl $18", "call write", "addl $4, %esp", "popl %edx", "popl %ecx", "popl %eax":);
+write (x-y);
+write (x/y);
+write (x%y)

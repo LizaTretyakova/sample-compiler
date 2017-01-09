@@ -1,19 +1,17 @@
 TESTS=test001 test002 test003 test004 test005 test006 test007 test008 test009 test010 test011 test012 test013 test014 test015 test016 test017 test018 test019 test020 test021 test022 test023 # test027 test028 
-ASM_TESTS=test024
+ASM_TESTS=test024 test025 test026
 
-.PHONY: check $(TESTS) 
+.PHONY: check $(TESTS) $(ASM_TESTS) 
 
-check: $(TESTS) $(INTERPRETER_TESTS)
+check: $(TESTS) $(ASM_TESTS)
 
 $(TESTS): %: %.expr
 	RC_RUNTIME=../runtime ../rc.native -o $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
 	cat $@.input | ../rc.native -i $< > $@.log && diff $@.log orig/$@.log
 	cat $@.input | ../rc.native -s $< > $@.log && diff $@.log orig/$@.log
 
-$(ASM_TESTS): %: %.expr
+$(ASM_TESTS): %: %.expr 
 	RC_RUNTIME=../runtime ../rc.native -o $< && cat $@.input | ./$@ > $@.log && diff $@.log orig/$@.log
-	cat $@.input | ../rc.native -i $< > $@.log && diff $@.log orig/$@.log
-	cat $@.input | ../rc.native -s $< > $@.log && diff $@.log orig/$@.log
 
 clean:
 	rm -f test*.log *.s *~ $(TESTS)

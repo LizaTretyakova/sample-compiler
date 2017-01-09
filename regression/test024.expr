@@ -1,5 +1,6 @@
 x := read();
 y := read();
 z := 3;
-asm ("imull %eax, %eax", "imull #1, #2" : x, y, z);
+asm ("imull $1, %eax" :);
+asm ("imull #0, #2", "imull #1, #2" : x, y, z);
 write (z)
