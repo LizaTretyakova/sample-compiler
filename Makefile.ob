@@ -1,7 +1,7 @@
 MKDIR ?= mkdir -vp
 CP    ?= cp
 
-OB=ocamlbuild -no-hygiene -use-ocamlfind -plugin-tag "package(str)" -classic-display
+OB=ocamlbuild -no-hygiene -use-ocamlfind -package str -plugin-tag "package(str)" -classic-display
 ifdef OBV
 OB += -verbose 6
 endif
